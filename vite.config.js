@@ -17,4 +17,7 @@ export default defineConfig({
     strictPort: true,
     host: '0.0.0.0',
   },
+  optimizeDeps: {
+    include: ['three', '3d-force-graph', 'three-spritetext'],
+  },
 })
