@@ -544,7 +544,7 @@ const ActionTooltipLayout = ({ node, color, graphData }) => {
             {node.name}
           </p>
         )}
-      </div>
+      </div> 
 
       {/* Right Side - Icons only */}
       <div className="flex flex-col items-center justify-between ml-4 flex-shrink-0 self-stretch" style={{ gap: '6px' }}>
