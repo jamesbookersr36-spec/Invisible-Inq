@@ -534,7 +534,7 @@ const ActionTooltipLayout = ({ node, color, graphData }) => {
         {/* Type Information */}
         <div className="flex items-center mb-3">
           <span className="text-[#707070] text-xs">
-            Type: <span style={{ color }}>{Amount}</span>
+            Type: <span style={{ color }}>Amount</span>
           </span>
         </div>
 
