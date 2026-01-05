@@ -548,6 +548,14 @@ const ThreeGraphVisualization = React.memo(({
   const nodeLookupMapRef = useRef(new Map()); // Fast O(1) node lookup map
   const previousDataRef = useRef(null); // Track previous data for incremental updates
   
+  // Region-based subgraph dragging state
+  const regionDragRef = useRef({
+    isDragging: false,
+    startMouseX: 0,
+    startMouseY: 0,
+    initialNodePositions: new Map() // Map of nodeId -> {x, y, z}
+  });
+  
   // Keep refs in sync with state to avoid useEffect re-runs
   useEffect(() => {
     selectedNodesRef.current = selectedNodes;
@@ -3724,7 +3732,7 @@ const ThreeGraphVisualization = React.memo(({
       const mouseY = e.clientY - rect.top;
       
       // Check if clicking inside an existing selected region
-      // If so, allow node dragging instead of starting new selection
+      // If so, start region-based subgraph dragging
       if (selectedRegionRef.current && selectedNodesRef.current.size > 0) {
         let isInsideRegion = false;
         
@@ -3735,8 +3743,50 @@ const ThreeGraphVisualization = React.memo(({
                           mouseY <= selectedRegionRef.current.maxY;
         }
         
-        // If clicking inside selected region, don't start new selection - allow dragging
+        // If clicking inside selected region, start region-based subgraph dragging
         if (isInsideRegion) {
+          // Check if clicking on a node (let the node drag handler handle it)
+          if (hoveredNodeRef.current && selectedNodesRef.current.has(hoveredNodeRef.current.id)) {
+            return; // Let the built-in node drag handler handle this
+          }
+          
+          // Start region-based dragging for the subgraph
+          const graph = graphRef.current;
+          if (graph) {
+            const graphData = graph.graphData();
+            if (graphData && graphData.nodes) {
+              // Store initial positions of all selected nodes
+              const initialPositions = new Map();
+              graphData.nodes.forEach(node => {
+                if (selectedNodesRef.current.has(node.id)) {
+                  initialPositions.set(node.id, { x: node.x, y: node.y, z: node.z || 0 });
+                }
+              });
+              
+              regionDragRef.current = {
+                isDragging: true,
+                startMouseX: e.clientX,
+                startMouseY: e.clientY,
+                initialNodePositions: initialPositions
+              };
+              
+              // Disable controls during region drag
+              const controls = graph.controls();
+              if (controls) {
+                controls.enabled = false;
+                controls.enableRotate = false;
+                controls.enablePan = false;
+                controls.enableZoom = false;
+              }
+              
+              if (isMountedRef.current) {
+                setCursorStyle('grabbing');
+              }
+              
+              e.preventDefault();
+              e.stopPropagation();
+            }
+          }
           return;
         }
       }
@@ -3789,6 +3839,81 @@ const ThreeGraphVisualization = React.memo(({
     };
 
     const handleMouseMove = (e) => {
+      // Handle region-based subgraph dragging
+      if (regionDragRef.current.isDragging) {
+        const graph = graphRef.current;
+        if (!graph) return;
+        
+        const graphData = graph.graphData();
+        if (!graphData || !graphData.nodes) return;
+        
+        // Calculate mouse delta in screen space
+        const deltaScreenX = e.clientX - regionDragRef.current.startMouseX;
+        const deltaScreenY = e.clientY - regionDragRef.current.startMouseY;
+        
+        // Convert screen delta to 3D world delta
+        // Use camera to project/unproject for accurate 3D movement
+        const camera = graph.camera();
+        const rect = container.getBoundingClientRect();
+        
+        // Get a reference point in 3D space (center of selected nodes)
+        let centerX = 0, centerY = 0, centerZ = 0;
+        let count = 0;
+        regionDragRef.current.initialNodePositions.forEach((pos) => {
+          centerX += pos.x;
+          centerY += pos.y;
+          centerZ += pos.z;
+          count++;
+        });
+        if (count > 0) {
+          centerX /= count;
+          centerY /= count;
+          centerZ /= count;
+        }
+        
+        // Project center to screen, apply delta, then unproject back
+        const centerVec = new THREE.Vector3(centerX, centerY, centerZ);
+        centerVec.project(camera);
+        
+        // Convert to screen coordinates, apply delta, convert back to NDC
+        const screenX = (centerVec.x + 1) / 2 * rect.width;
+        const screenY = (-centerVec.y + 1) / 2 * rect.height;
+        const newScreenX = screenX + deltaScreenX;
+        const newScreenY = screenY + deltaScreenY;
+        const newNdcX = (newScreenX / rect.width) * 2 - 1;
+        const newNdcY = -(newScreenY / rect.height) * 2 + 1;
+        
+        // Unproject back to 3D
+        const newCenterVec = new THREE.Vector3(newNdcX, newNdcY, centerVec.z);
+        newCenterVec.unproject(camera);
+        
+        // Calculate 3D delta
+        const delta3DX = newCenterVec.x - centerX;
+        const delta3DY = newCenterVec.y - centerY;
+        const delta3DZ = newCenterVec.z - centerZ;
+        
+        // Move all selected nodes by the 3D delta
+        graphData.nodes.forEach(node => {
+          if (regionDragRef.current.initialNodePositions.has(node.id)) {
+            const initialPos = regionDragRef.current.initialNodePositions.get(node.id);
+            node.x = initialPos.x + delta3DX;
+            node.y = initialPos.y + delta3DY;
+            node.z = initialPos.z + delta3DZ;
+            // Pin the node at its new position
+            node.fx = node.x;
+            node.fy = node.y;
+            node.fz = node.z;
+          }
+        });
+        
+        // Trigger re-render
+        graph.graphData(graphData);
+        
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+      
       // Handle box selection drawing
       if (!isSelecting) return;
       
@@ -3816,7 +3941,83 @@ const ThreeGraphVisualization = React.memo(({
       }
     };
 
-    const handleMouseUp = () => {
+    const handleMouseUp = (e) => {
+      // Handle region-based subgraph drag end
+      if (regionDragRef.current.isDragging) {
+        const graph = graphRef.current;
+        if (graph) {
+          const graphData = graph.graphData();
+          if (graphData && graphData.nodes) {
+            // Pin all selected nodes at their final positions
+            regionDragRef.current.initialNodePositions.forEach((_, nodeId) => {
+              const node = graphData.nodes.find(n => n.id === nodeId);
+              if (node) {
+                pinnedNodesRef.current.add(node.id);
+                node.fx = node.x;
+                node.fy = node.y;
+                node.fz = node.z;
+              }
+            });
+            
+            // Update the selected region to match new node positions
+            const camera = graph.camera();
+            const rect = container.getBoundingClientRect();
+            let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+            
+            regionDragRef.current.initialNodePositions.forEach((_, nodeId) => {
+              const node = graphData.nodes.find(n => n.id === nodeId);
+              if (node) {
+                const vector = new THREE.Vector3(node.x, node.y, node.z || 0);
+                vector.project(camera);
+                const screenX = (vector.x + 1) / 2 * rect.width;
+                const screenY = (-vector.y + 1) / 2 * rect.height;
+                minX = Math.min(minX, screenX);
+                maxX = Math.max(maxX, screenX);
+                minY = Math.min(minY, screenY);
+                maxY = Math.max(maxY, screenY);
+              }
+            });
+            
+            // Update the region bounds with some padding
+            const padding = 20;
+            if (isMountedRef.current) {
+              const newRegion = {
+                type: 'box',
+                minX: minX - padding,
+                maxX: maxX + padding,
+                minY: minY - padding,
+                maxY: maxY + padding
+              };
+              setSelectedRegion(newRegion);
+              selectedRegionRef.current = newRegion;
+            }
+          }
+          
+          // Re-enable controls
+          const controls = graph.controls();
+          if (controls) {
+            controls.enabled = true;
+            controls.enableRotate = false; // Keep rotate disabled in multi-select
+            controls.enablePan = false; // Keep pan disabled in multi-select
+            controls.enableZoom = true; // Allow zoom
+          }
+        }
+        
+        // Reset region drag state
+        regionDragRef.current = {
+          isDragging: false,
+          startMouseX: 0,
+          startMouseY: 0,
+          initialNodePositions: new Map()
+        };
+        
+        if (isMountedRef.current) {
+          setCursorStyle('grab');
+        }
+        
+        return;
+      }
+      
       // Handle selection end
       if (!isSelecting) return;
       
@@ -3964,7 +4165,7 @@ const ThreeGraphVisualization = React.memo(({
       const mouseY = e.clientY - rect.top;
       
       // Check if clicking inside an existing selected region
-      // If so, allow node dragging instead of starting new selection
+      // If so, start region-based subgraph dragging
       if (selectedRegionRef.current && selectedNodesRef.current.size > 0) {
         let isInsideRegion = false;
         
@@ -3973,8 +4174,50 @@ const ThreeGraphVisualization = React.memo(({
           isInsideRegion = isPointInPolygon(mouseX, mouseY, selectedRegionRef.current.path);
         }
         
-        // If clicking inside selected region, don't start new selection - allow dragging
+        // If clicking inside selected region, start region-based subgraph dragging
         if (isInsideRegion) {
+          // Check if clicking on a node (let the node drag handler handle it)
+          if (hoveredNodeRef.current && selectedNodesRef.current.has(hoveredNodeRef.current.id)) {
+            return; // Let the built-in node drag handler handle this
+          }
+          
+          // Start region-based dragging for the subgraph
+          const graph = graphRef.current;
+          if (graph) {
+            const graphData = graph.graphData();
+            if (graphData && graphData.nodes) {
+              // Store initial positions of all selected nodes
+              const initialPositions = new Map();
+              graphData.nodes.forEach(node => {
+                if (selectedNodesRef.current.has(node.id)) {
+                  initialPositions.set(node.id, { x: node.x, y: node.y, z: node.z || 0 });
+                }
+              });
+              
+              regionDragRef.current = {
+                isDragging: true,
+                startMouseX: e.clientX,
+                startMouseY: e.clientY,
+                initialNodePositions: initialPositions
+              };
+              
+              // Disable controls during region drag
+              const controls = graph.controls();
+              if (controls) {
+                controls.enabled = false;
+                controls.enableRotate = false;
+                controls.enablePan = false;
+                controls.enableZoom = false;
+              }
+              
+              if (isMountedRef.current) {
+                setCursorStyle('grabbing');
+              }
+              
+              e.preventDefault();
+              e.stopPropagation();
+            }
+          }
           return;
         }
       }
@@ -4026,6 +4269,80 @@ const ThreeGraphVisualization = React.memo(({
     };
 
     const handleMouseMove = (e) => {
+      // Handle region-based subgraph dragging
+      if (regionDragRef.current.isDragging) {
+        const graph = graphRef.current;
+        if (!graph) return;
+        
+        const graphData = graph.graphData();
+        if (!graphData || !graphData.nodes) return;
+        
+        // Calculate mouse delta in screen space
+        const deltaScreenX = e.clientX - regionDragRef.current.startMouseX;
+        const deltaScreenY = e.clientY - regionDragRef.current.startMouseY;
+        
+        // Convert screen delta to 3D world delta
+        const camera = graph.camera();
+        const rect = container.getBoundingClientRect();
+        
+        // Get a reference point in 3D space (center of selected nodes)
+        let centerX = 0, centerY = 0, centerZ = 0;
+        let count = 0;
+        regionDragRef.current.initialNodePositions.forEach((pos) => {
+          centerX += pos.x;
+          centerY += pos.y;
+          centerZ += pos.z;
+          count++;
+        });
+        if (count > 0) {
+          centerX /= count;
+          centerY /= count;
+          centerZ /= count;
+        }
+        
+        // Project center to screen, apply delta, then unproject back
+        const centerVec = new THREE.Vector3(centerX, centerY, centerZ);
+        centerVec.project(camera);
+        
+        // Convert to screen coordinates, apply delta, convert back to NDC
+        const screenX = (centerVec.x + 1) / 2 * rect.width;
+        const screenY = (-centerVec.y + 1) / 2 * rect.height;
+        const newScreenX = screenX + deltaScreenX;
+        const newScreenY = screenY + deltaScreenY;
+        const newNdcX = (newScreenX / rect.width) * 2 - 1;
+        const newNdcY = -(newScreenY / rect.height) * 2 + 1;
+        
+        // Unproject back to 3D
+        const newCenterVec = new THREE.Vector3(newNdcX, newNdcY, centerVec.z);
+        newCenterVec.unproject(camera);
+        
+        // Calculate 3D delta
+        const delta3DX = newCenterVec.x - centerX;
+        const delta3DY = newCenterVec.y - centerY;
+        const delta3DZ = newCenterVec.z - centerZ;
+        
+        // Move all selected nodes by the 3D delta
+        graphData.nodes.forEach(node => {
+          if (regionDragRef.current.initialNodePositions.has(node.id)) {
+            const initialPos = regionDragRef.current.initialNodePositions.get(node.id);
+            node.x = initialPos.x + delta3DX;
+            node.y = initialPos.y + delta3DY;
+            node.z = initialPos.z + delta3DZ;
+            // Pin the node at its new position
+            node.fx = node.x;
+            node.fy = node.y;
+            node.fz = node.z;
+          }
+        });
+        
+        // Trigger re-render
+        graph.graphData(graphData);
+        
+        e.preventDefault();
+        e.stopPropagation();
+        return;
+      }
+      
       // Handle lasso selection drawing
       if (!isSelecting) return;
       
@@ -4055,7 +4372,92 @@ const ThreeGraphVisualization = React.memo(({
       }
     };
 
-    const handleMouseUp = () => {
+    const handleMouseUp = (e) => {
+      // Handle region-based subgraph drag end
+      if (regionDragRef.current.isDragging) {
+        const graph = graphRef.current;
+        if (graph) {
+          const graphData = graph.graphData();
+          if (graphData && graphData.nodes) {
+            // Pin all selected nodes at their final positions
+            regionDragRef.current.initialNodePositions.forEach((_, nodeId) => {
+              const node = graphData.nodes.find(n => n.id === nodeId);
+              if (node) {
+                pinnedNodesRef.current.add(node.id);
+                node.fx = node.x;
+                node.fy = node.y;
+                node.fz = node.z;
+              }
+            });
+            
+            // Update the selected region to match new node positions (as lasso path)
+            const camera = graph.camera();
+            const rect = container.getBoundingClientRect();
+            const newPath = [];
+            
+            regionDragRef.current.initialNodePositions.forEach((_, nodeId) => {
+              const node = graphData.nodes.find(n => n.id === nodeId);
+              if (node) {
+                const vector = new THREE.Vector3(node.x, node.y, node.z || 0);
+                vector.project(camera);
+                const screenX = (vector.x + 1) / 2 * rect.width;
+                const screenY = (-vector.y + 1) / 2 * rect.height;
+                newPath.push({ x: screenX, y: screenY });
+              }
+            });
+            
+            // Create a convex hull or bounding box for the new region
+            if (newPath.length > 0 && isMountedRef.current) {
+              // Calculate bounding box with padding
+              let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+              newPath.forEach(p => {
+                minX = Math.min(minX, p.x);
+                maxX = Math.max(maxX, p.x);
+                minY = Math.min(minY, p.y);
+                maxY = Math.max(maxY, p.y);
+              });
+              const padding = 20;
+              
+              // Create a box-based region from the lasso result
+              const newRegion = {
+                type: 'lasso',
+                path: [
+                  { x: minX - padding, y: minY - padding },
+                  { x: maxX + padding, y: minY - padding },
+                  { x: maxX + padding, y: maxY + padding },
+                  { x: minX - padding, y: maxY + padding }
+                ]
+              };
+              setSelectedRegion(newRegion);
+              selectedRegionRef.current = newRegion;
+            }
+          }
+          
+          // Re-enable controls
+          const controls = graph.controls();
+          if (controls) {
+            controls.enabled = true;
+            controls.enableRotate = false;
+            controls.enablePan = false;
+            controls.enableZoom = true;
+          }
+        }
+        
+        // Reset region drag state
+        regionDragRef.current = {
+          isDragging: false,
+          startMouseX: 0,
+          startMouseY: 0,
+          initialNodePositions: new Map()
+        };
+        
+        if (isMountedRef.current) {
+          setCursorStyle('grab');
+        }
+        
+        return;
+      }
+      
       // Handle lasso selection end
       if (!isSelecting) return;
       
