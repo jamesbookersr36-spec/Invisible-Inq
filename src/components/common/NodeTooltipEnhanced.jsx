@@ -194,35 +194,77 @@ const LocationTooltipLayout = ({ node, color }) => {
 };
 
 // Amount/Transaction-specific layout - Custom flow design
-const AmountTooltipLayout = ({ node, color }) => {
+const AmountTooltipLayout = ({ node, color, graphData }) => {
   // Extract transaction/amount specific data
   const amount = node.Amount || node.amount || node.value || node.properties?.amount || node.name || '0';
   
-  // Source entity - check multiple possible property names
-  const sourceEntity = node['Distributor Full Name'] || 
-                       node.source_entity || 
-                       node.source_name ||
-                       node.from_name ||
-                       node.from_entity ||
-                       node.from ||
-                       node.sourceName ||
-                       node.properties?.source || 
-                       node.properties?.source_name ||
-                       node.properties?.from ||
-                       'Entity Source';
+  // Find connected source and target from graph links
+  let sourceEntity = 'Entity Source';
+  let targetEntity = 'Entity Target';
   
-  // Target entity - check multiple possible property names
-  const targetEntity = node['Receiver Name'] || 
-                       node.target_entity || 
-                       node.target_name ||
-                       node.to_name ||
-                       node.to_entity ||
-                       node.to ||
-                       node.targetName ||
-                       node.properties?.target || 
-                       node.properties?.target_name ||
-                       node.properties?.to ||
-                       'Entity Target';
+  if (graphData?.links && graphData?.nodes) {
+    const nodeId = node.id;
+    
+    // Find links connected to this amount node
+    const incomingLinks = graphData.links.filter(link => {
+      const targetId = link.target?.id || link.targetId || link.target;
+      return targetId === nodeId;
+    });
+    
+    const outgoingLinks = graphData.links.filter(link => {
+      const sourceId = link.source?.id || link.sourceId || link.source;
+      return sourceId === nodeId;
+    });
+    
+    // Get source node (node that links TO this amount)
+    if (incomingLinks.length > 0) {
+      const sourceLink = incomingLinks[0];
+      const sourceId = sourceLink.source?.id || sourceLink.sourceId || sourceLink.source;
+      const sourceNode = graphData.nodes.find(n => n.id === sourceId);
+      if (sourceNode) {
+        sourceEntity = sourceNode.name || sourceNode.id || 'Entity Source';
+      }
+    }
+    
+    // Get target node (node that this amount links TO)
+    if (outgoingLinks.length > 0) {
+      const targetLink = outgoingLinks[0];
+      const targetId = targetLink.target?.id || targetLink.targetId || targetLink.target;
+      const targetNode = graphData.nodes.find(n => n.id === targetId);
+      if (targetNode) {
+        targetEntity = targetNode.name || targetNode.id || 'Entity Target';
+      }
+    }
+  }
+  
+  // Fallback to node properties if graph data didn't provide values
+  if (sourceEntity === 'Entity Source') {
+    sourceEntity = node['Distributor Full Name'] || 
+                   node.source_entity || 
+                   node.source_name ||
+                   node.from_name ||
+                   node.from_entity ||
+                   node.from ||
+                   node.sourceName ||
+                   node.properties?.source || 
+                   node.properties?.source_name ||
+                   node.properties?.from ||
+                   'Entity Source';
+  }
+  
+  if (targetEntity === 'Entity Target') {
+    targetEntity = node['Receiver Name'] || 
+                   node.target_entity || 
+                   node.target_name ||
+                   node.to_name ||
+                   node.to_entity ||
+                   node.to ||
+                   node.targetName ||
+                   node.properties?.target || 
+                   node.properties?.target_name ||
+                   node.properties?.to ||
+                   'Entity Target';
+  }
   
   const entityType = node.section || node.entity_type || node.subtype || node.node_type || node.type || node.properties?.type || 'Type';
   const relatedCount = node.degree || node.related_count || node.count || node.properties?.related_count || null;
@@ -359,9 +401,203 @@ const RelationshipTooltipLayout = ({ node, color }) => {
   return <BaseTooltipLayout node={node} color={color} />;
 };
 
-// Action-specific layout - Uses base layout
-const ActionTooltipLayout = ({ node, color }) => {
-  return <BaseTooltipLayout node={node} color={color} />;
+// Action-specific layout - Shows Source → ProcessName → Target flow
+const ActionTooltipLayout = ({ node, color, graphData }) => {
+  // Process/Action name (the node's name displayed in the middle)
+  const processName = node.category || 'Action';
+  
+  // Find connected source and target from graph links
+  let sourceEntity = 'Entity Source';
+  let targetEntity = 'Entity Target';
+  
+  if (graphData?.links && graphData?.nodes) {
+    const nodeId = node.id;
+    
+    // Find links connected to this action node
+    const incomingLinks = graphData.links.filter(link => {
+      const targetId = link.target?.id || link.targetId || link.target;
+      return targetId === nodeId;
+    });
+    
+    const outgoingLinks = graphData.links.filter(link => {
+      const sourceId = link.source?.id || link.sourceId || link.source;
+      return sourceId === nodeId;
+    });
+    
+    // Get source node (node that links TO this action)
+    if (incomingLinks.length > 0) {
+      const sourceLink = incomingLinks[0];
+      const sourceId = sourceLink.source?.id || sourceLink.sourceId || sourceLink.source;
+      const sourceNode = graphData.nodes.find(n => n.id === sourceId);
+      if (sourceNode) {
+        sourceEntity = sourceNode.name || sourceNode.id || 'Entity Source';
+      }
+    }
+    
+    // Get target node (node that this action links TO)
+    if (outgoingLinks.length > 0) {
+      const targetLink = outgoingLinks[0];
+      const targetId = targetLink.target?.id || targetLink.targetId || targetLink.target;
+      const targetNode = graphData.nodes.find(n => n.id === targetId);
+      if (targetNode) {
+        targetEntity = targetNode.name || targetNode.id || 'Entity Target';
+      }
+    }
+  }
+  
+  // Fallback to node properties if graph data didn't provide values
+  if (sourceEntity === 'Entity Source') {
+    sourceEntity = node.source_entity || 
+                   node.source_name ||
+                   node.from_name ||
+                   node.from_entity ||
+                   node.from ||
+                   node.sourceName ||
+                   node.actor ||
+                   node.properties?.source || 
+                   node.properties?.source_name ||
+                   node.properties?.from ||
+                   node.properties?.actor ||
+                   'Entity Source';
+  }
+  
+  if (targetEntity === 'Entity Target') {
+    targetEntity = node.target_entity || 
+                   node.target_name ||
+                   node.to_name ||
+                   node.to_entity ||
+                   node.to ||
+                   node.targetName ||
+                   node.subject ||
+                   node.object ||
+                   node.properties?.target || 
+                   node.properties?.target_name ||
+                   node.properties?.to ||
+                   node.properties?.subject ||
+                   'Entity Target';
+  }
+
+  const entityType = node.section || node.action_type || node.subtype || node.type || node.properties?.type || 'Type';
+  const relatedCount = node.degree || node.related_count || node.count || node.properties?.related_count || 857;
+
+  // Description text
+  const description = node.description || node.desc || node.summary || node.properties?.description || '';
+
+  return (
+    <div 
+      className="flex flex-row rounded-[10px] relative"
+      style={{ 
+        width: '520px',
+        minHeight: '140px',
+        padding: '12px 15px',
+        background: '#1a1a1a',
+        border: '2px solid #1F1F22',
+        backdropFilter: 'blur(10px)'
+      }}
+    >
+      {/* Vertical Accent Bar - Orange for Action */}
+      <div 
+        className="absolute left-3 top-3 bottom-3 w-1.5 rounded-full"
+        style={{ backgroundColor: color }}
+      />
+
+      {/* Main Content Area */}
+      <div className="flex-1 ml-5 min-w-0 flex flex-col">
+        {/* Action Flow: Source → ProcessName → Target */}
+        <div className="flex items-center gap-2 mb-1 flex-wrap">
+          {/* Source Entity */}
+          <span className="text-[#B0B0B0] text-base font-medium truncate max-w-[120px]">
+            {sourceEntity}
+          </span>
+
+          {/* Arrow */}
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="text-[#EF4444] flex-shrink-0">
+            <path d="M5 12H19M19 12L12 5M19 12L12 19" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+
+          {/* Process Name (highlighted in orange) */}
+          <span className="text-xl font-bold flex-shrink-0" style={{ color }}>
+            {processName}
+          </span>
+
+          {/* Arrow */}
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" className="text-[#EF4444] flex-shrink-0">
+            <path d="M5 12H19M19 12L12 5M19 12L12 19" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+
+          {/* Target Entity */}
+          <span className="text-[#B0B0B0] text-base font-medium truncate max-w-[120px]">
+            {targetEntity}
+          </span>
+        </div>
+
+        {/* Type Information */}
+        <div className="flex items-center mb-3">
+          <span className="text-[#707070] text-xs">
+            Type: <span style={{ color }}>{Amount}</span>
+          </span>
+        </div>
+
+        {/* Description */}
+        {node.name && (
+          <p className="text-[#606060] text-sm leading-relaxed line-clamp-3">
+            {node.name}
+          </p>
+        )}
+      </div>
+
+      {/* Right Side - Icons only */}
+      <div className="flex flex-col items-center justify-between ml-4 flex-shrink-0 self-stretch" style={{ gap: '6px' }}>
+        {/* Top: Chevron/Expand Icon */}
+        <button 
+          className="flex items-center justify-center text-[#505050] hover:text-[#303030] transition-colors"
+          title="Expand"
+          style={{ padding: '5px 0 0 0' }}
+        >
+          <svg width="16" height="8" viewBox="0 0 16 8" fill="none">
+            <path d="M1 7L8 1L15 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </button>
+
+        {/* Middle: Network Icon */}
+        <div className="flex-1 flex items-center justify-center">
+          <button 
+            className="flex items-center justify-center text-[#707070] hover:text-[#505050] transition-colors"
+            title="View Network"
+          >
+            <svg width="17" height="17" viewBox="0 0 17 17" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M14.8868 9.49648C14.313 9.49671 13.7642 9.73132 13.3674 10.1459L11.7565 9.46128C11.8666 9.13184 11.9246 8.78726 11.9284 8.43992C11.9245 6.57423 10.413 5.06273 8.54735 5.05888C8.26529 5.0624 7.98483 5.10168 7.71266 5.17582L6.78639 3.52685C7.57065 2.66732 7.50962 1.33475 6.65009 0.55049C5.79056 -0.233768 4.45799 -0.17274 3.67373 0.686789C2.88947 1.54632 2.9505 2.87889 3.81003 3.66315C4.19987 4.01886 4.709 4.21529 5.23677 4.21362C5.33807 4.21074 5.43907 4.20061 5.53895 4.18334L6.44971 5.80342C5.08174 6.86865 4.75702 8.80386 5.70234 10.2573L3.03696 12.836C1.94634 12.3522 0.669978 12.8441 0.186142 13.9347C-0.297694 15.0253 0.19421 16.3017 1.28483 16.7855C2.37546 17.2694 3.65182 16.7775 4.13565 15.6868C4.40476 15.0802 4.38016 14.3836 4.06888 13.7975L6.6899 11.2617C8.08241 12.1883 9.94507 11.945 11.0529 10.6919L12.7913 11.4301C12.7864 11.4899 12.7737 11.5477 12.7737 11.6083C12.7737 12.7753 13.7198 13.7214 14.8868 13.7214C16.0539 13.7214 17 12.7753 17 11.6082C17 10.4412 16.0539 9.49508 14.8868 9.49508V9.49648Z" fill="currentColor"/>
+            </svg>
+          </button>
+        </div>
+
+        {/* Bottom: Count Badge */}
+        <div 
+          className="flex items-center justify-end gap-0.5"
+          style={{ 
+            background: '#FFFFFF',
+            border: '0.5px solid #909090',
+            borderRadius: '0 0 5px 0',
+            padding: '2px 6px'
+          }}
+        >
+          <svg width="7.5" height="7.5" viewBox="0 0 10 10" fill="none">
+            <path d="M5 0V10M0 5H10" stroke="#505050" strokeWidth="2" />
+          </svg>
+          <span style={{ 
+            fontFamily: 'Open Sans, sans-serif',
+            fontWeight: 600,
+            fontSize: '10px',
+            lineHeight: '1.1em',
+            letterSpacing: '-0.025em',
+            color: '#505050'
+          }}>
+            {relatedCount}
+          </span>
+        </div>
+      </div>
+    </div>
+  );
 };
 
 // Result-specific layout (placeholder for future customization)
@@ -394,7 +630,7 @@ const getTooltipLayout = (nodeType) => {
 /**
  * Main NodeTooltipEnhanced Component
  */
-const NodeTooltipEnhanced = ({ node, position }) => {
+const NodeTooltipEnhanced = ({ node, position, graphData }) => {
   if (!node || !position) return null;
 
   const nodeType = node.node_type || node.type || node.category || '';
@@ -410,7 +646,7 @@ const NodeTooltipEnhanced = ({ node, position }) => {
         transform: 'translate(-50%, -120%)', // Position above the cursor
       }}
     >
-      <TooltipLayout node={node} color={color} />
+      <TooltipLayout node={node} color={color} graphData={graphData} />
     </div>
   );
 };

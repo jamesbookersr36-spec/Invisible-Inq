@@ -4358,7 +4358,7 @@ const ThreeGraphVisualization = React.memo(({
         </div>
       </div>
       {/* Tooltip for node hover - Enhanced with node-type specific layouts */}
-      <NodeTooltipEnhanced node={hoveredNode} position={tooltipPosition} />
+      <NodeTooltipEnhanced node={hoveredNode} position={tooltipPosition} graphData={data} />
     </>
   );
 });
