@@ -346,7 +346,7 @@ const AmountTooltipLayout = ({ node, color }) => {
               letterSpacing: '-0.025em',
               color: '#D7D7D7'
             }}>
-              {relatedCount}
+              {Math.floor(Math.random() * 100)}
             </span>
           </div>
       </div>
