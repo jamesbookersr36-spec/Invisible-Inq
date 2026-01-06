@@ -1,12 +1,18 @@
 import os
+import logging
 from dotenv import load_dotenv
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 class Config:
     NEO4J_URI = os.getenv("NEO4J_URI", "bolt://localhost:7687")
     NEO4J_USER = os.getenv("NEO4J_USER", "neo4j")
     NEO4J_PASSWORD = os.getenv("NEO4J_PASSWORD", "")
+
+    # Neon PostgreSQL Configuration
+    NEON_DATABASE_URL = os.getenv("NEON_DATABASE_URL", "")
 
     BACKEND_HOST = os.getenv("BACKEND_HOST", "0.0.0.0")
     BACKEND_PORT = int(os.getenv("BACKEND_PORT", "8000"))
@@ -21,4 +27,6 @@ class Config:
     def validate(cls):
         if not cls.NEO4J_PASSWORD:
             raise ValueError("NEO4J_PASSWORD environment variable is required")
+        if not cls.NEON_DATABASE_URL:
+            logger.warning("NEON_DATABASE_URL not configured - entity wikidata features will be disabled")
         return True

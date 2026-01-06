@@ -8,6 +8,7 @@ import CombinedStoryDropdown from '../components/story/CombinedStoryDropdown';
 import useGraphData from '../hooks/useGraphData';
 import DonationPopup from '../components/common/DonationPopup';
 import AISearchModal from '../components/common/AISearchModal';
+import AISummaryModal from '../components/common/AISummaryModal';
 import StringConstants from '../components/StringConstants';
 import AddNodeModal from '../components/common/AddNodeModal';
 import ContextMenu from '../components/common/ContextMenu';
@@ -53,6 +54,9 @@ const HomePage = () => {
   const [aiGeneratedQuery, setAiGeneratedQuery] = useState(null);
   const [aiSearchLoading, setAiSearchLoading] = useState(false);
   const [aiSearchError, setAiSearchError] = useState(null);
+  // AI Summary Modal state
+  const [showAISummaryModal, setShowAISummaryModal] = useState(false);
+  const [aiSummaryQuery, setAiSummaryQuery] = useState('');
   const [showAddNodeModal, setShowAddNodeModal] = useState(false);
   const [rightSidebarActiveTab, setRightSidebarActiveTab] = useState('node-properties');
   const [hiddenCategories, setHiddenCategories] = useState(new Set());
@@ -1313,6 +1317,25 @@ const HomePage = () => {
     setAiSearchError(null);
   };
 
+  // AI Summary handlers
+  const handleAISummary = (query) => {
+    setAiSummaryQuery(query);
+    setShowAISummaryModal(true);
+  };
+
+  const handleCloseAISummaryModal = () => {
+    setShowAISummaryModal(false);
+    setAiSummaryQuery('');
+  };
+
+  const handleSummaryEntityClick = (node) => {
+    // Close the modal and select the node in the graph
+    setShowAISummaryModal(false);
+    selectNode(node);
+    // Zoom to the node
+    setZoomAction({ type: 'toNode', node });
+  };
+
   if (!showGraphView) {
     return (
       <div className="flex flex-col min-h-screen bg-black text-white">
@@ -1520,6 +1543,7 @@ const HomePage = () => {
       showRightSidebar={showRightSidebar}
       onToggleRightSidebar={() => setShowRightSidebar(!showRightSidebar)}
       onAISearch={handleAISearch}
+      onAISummary={handleAISummary}
       graphData={graphData}
       filteredGraphData={filteredGraphData}
       onEntityHighlight={selectEntityById}
@@ -2501,6 +2525,17 @@ const HomePage = () => {
         graphData={aiSearchResults}
         searchQuery={aiSearchQuery}
         generatedQuery={aiGeneratedQuery}
+      />
+    )}
+
+    {/* AI Summary Modal */}
+    {showAISummaryModal && (
+      <AISummaryModal
+        isOpen={showAISummaryModal}
+        onClose={handleCloseAISummaryModal}
+        query={aiSummaryQuery}
+        graphData={graphData}
+        onEntityClick={handleSummaryEntityClick}
       />
     )}
 

@@ -747,3 +747,353 @@ def get_all_node_types() -> List[str]:
             'Sub Agency', 'USAID Program Region'
         ]
 
+
+def generate_graph_summary(query: str, graph_data: dict) -> dict:
+    """
+    Generate an AI summary of graph data with embedded entity markers.
+    
+    Args:
+        query: User's question about the graph
+        graph_data: Dict containing nodes and links
+        
+    Returns:
+        Dict with summary text containing [[Entity Name]] markers
+    """
+    from config import Config
+    import requests
+    
+    if not Config.GROK_API_KEY:
+        raise ValueError("GROK_API_KEY is not configured. Please set it in your .env file.")
+    
+    nodes = graph_data.get('nodes', [])
+    links = graph_data.get('links', [])
+    
+    if not nodes:
+        return {
+            "summary": "No graph data available to summarize.",
+            "entities": []
+        }
+    
+    # Build a summary of the graph structure for the AI
+    entity_names = []
+    entity_types = {}
+    
+    for node in nodes:
+        name = node.get('name') or node.get('entity_name') or node.get('id', '')
+        node_type = node.get('node_type') or node.get('type') or 'Entity'
+        if name:
+            entity_names.append(name)
+            entity_types[name] = node_type
+    
+    # Build relationship descriptions
+    relationship_descriptions = []
+    for link in links[:50]:  # Limit to first 50 relationships
+        from_name = link.get('from_name') or link.get('source', '')
+        to_name = link.get('to_name') or link.get('target', '')
+        rel_type = link.get('type') or link.get('label') or 'relates to'
+        rel_summary = link.get('relationship_summary', '')
+        
+        if from_name and to_name:
+            desc = f"- {from_name} {rel_type} {to_name}"
+            if rel_summary:
+                desc += f" ({rel_summary[:100]})"
+            relationship_descriptions.append(desc)
+    
+    # Build the prompt
+    prompt = f"""You are an investigative analyst assistant. Analyze the following graph data and answer the user's question.
+
+User Question: {query}
+
+Graph Contains:
+- {len(nodes)} nodes (entities)
+- {len(links)} relationships
+
+Key Entities (first 30):
+{chr(10).join(f'- {name} ({entity_types.get(name, "Entity")})' for name in entity_names[:30])}
+
+Key Relationships (first 20):
+{chr(10).join(relationship_descriptions[:20])}
+
+IMPORTANT INSTRUCTIONS:
+1. Provide a concise, insightful summary that answers the user's question
+2. When mentioning entities that exist in the graph, wrap them in double brackets like [[Entity Name]]
+3. Only use [[brackets]] for entity names that EXACTLY match names from the "Key Entities" list above
+4. Focus on the most significant connections and patterns
+5. Be specific and cite actual entity names from the data
+6. Keep the summary under 300 words
+7. If the question cannot be answered from the data, explain what information is available
+
+Example format:
+"The investigation reveals that [[Organization A]] has significant ties to [[Person B]] through multiple funding channels. [[Organization C]] appears to be a key intermediary..."
+
+Generate the summary:"""
+
+    try:
+        headers = {
+            "Authorization": f"Bearer {Config.GROK_API_KEY}",
+            "Content-Type": "application/json"
+        }
+        
+        payload = {
+            "messages": [
+                {
+                    "role": "system",
+                    "content": "You are an investigative analyst. Provide clear, factual summaries based on graph data. Always use [[Entity Name]] format when referencing entities."
+                },
+                {
+                    "role": "user",
+                    "content": prompt
+                }
+            ],
+            "model": Config.GROK_MODEL,
+            "temperature": 0.3,
+            "max_tokens": 1000
+        }
+        
+        response = requests.post(
+            Config.GROK_API_URL,
+            headers=headers,
+            json=payload,
+            timeout=60
+        )
+        
+        if response.status_code != 200:
+            error_text = response.text
+            logger.error(f"GROK API error: {response.status_code} - {error_text}")
+            raise ValueError(f"AI service error: {response.status_code}")
+        
+        result = response.json()
+        choices = result.get("choices", [])
+        
+        if not choices:
+            raise ValueError("AI service returned no response")
+        
+        summary_text = choices[0].get("message", {}).get("content", "").strip()
+        
+        if not summary_text:
+            raise ValueError("AI service returned empty summary")
+        
+        # Extract entity names from the summary (those in [[brackets]])
+        import re
+        mentioned_entities = re.findall(r'\[\[([^\]]+)\]\]', summary_text)
+        
+        # Validate that mentioned entities exist in the graph
+        valid_entities = []
+        entity_name_lower_map = {name.lower(): name for name in entity_names}
+        
+        for entity in mentioned_entities:
+            entity_lower = entity.lower()
+            if entity_lower in entity_name_lower_map:
+                valid_entities.append({
+                    "name": entity_name_lower_map[entity_lower],
+                    "mentioned_as": entity
+                })
+        
+        return {
+            "summary": summary_text,
+            "entities": valid_entities,
+            "query": query,
+            "node_count": len(nodes),
+            "link_count": len(links)
+        }
+        
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Network error connecting to AI service: {e}")
+        raise ValueError("Failed to connect to AI service. Please check your internet connection.")
+    except Exception as e:
+        logger.error(f"Error generating summary: {e}")
+        raise
+
+
+def get_entity_wikidata(entity_name: str) -> Dict[str, Any]:
+    """
+    Fetch detailed entity information from Neon PostgreSQL wikidata table.
+    Searches by name (case-insensitive partial match).
+    
+    Args:
+        entity_name: The name of the entity to search for
+        
+    Returns:
+        Dict with 'found' boolean and 'data' containing entity details if found
+    """
+    from neon_database import neon_db
+    from urllib.parse import unquote
+    
+    # Decode URL-encoded entity name and clean it
+    entity_name = unquote(entity_name).strip()
+    
+    logger.info(f"Fetching wikidata for entity: '{entity_name}'")
+    
+    # Check if Neon database is configured
+    if not neon_db.is_configured():
+        logger.warning("Neon database not configured, returning empty result")
+        return {"found": False, "data": None, "error": "Wikidata database not configured"}
+    
+    try:
+        # Verify we're querying the correct table in the wuhan database
+        # The query explicitly targets entity_wikidata table
+        query = """
+            SELECT 
+                qid, name, alias, description,
+                sex_or_gender, sex_or_gender_label, 
+                wikipedia_url, image_url, logo_url, url,
+                father, father_label, mother, mother_label, 
+                spouse, spouse_label, children, children_label,
+                country, country_label, headquarters, headquarters_label, 
+                place_of_birth, place_of_birth_label, location, location_label,
+                citizenship, citizenship_label,
+                date_birth, date_death,
+                occupation, occupation_label, educated_at, educated_at_label,
+                position_held, position_held_label, field_of_work, field_of_work_label,
+                significant_event, significant_event_label, residence, residence_label,
+                founded_by, founded_by_label, industry, industry_label,
+                start_time, end_time,
+                instance_of, instance_of_label, award_received, award_reeived_label,
+                viafid, locid, worldcat_id, locator_map, coordinates
+            FROM entity_wikidata
+            WHERE LOWER(TRIM(name)) = LOWER(TRIM(%s))
+               OR LOWER(TRIM(name)) LIKE LOWER(%s)
+               OR (alias IS NOT NULL AND LOWER(TRIM(alias)) LIKE LOWER(%s))
+            ORDER BY 
+                CASE 
+                    WHEN LOWER(TRIM(name)) = LOWER(TRIM(%s)) THEN 0
+                    WHEN LOWER(TRIM(name)) LIKE LOWER(%s) THEN 1
+                    ELSE 2
+                END,
+                LENGTH(name)
+            LIMIT 1
+        """
+         
+        search_pattern = f"%{entity_name}%"
+        
+        logger.debug(f"Querying entity_wikidata table for: '{entity_name}'")
+        logger.debug(f"Search pattern: '{search_pattern}'")
+        
+        results = neon_db.execute_query(
+            query, 
+            (entity_name, search_pattern, search_pattern, entity_name, search_pattern)
+        )
+        
+        logger.info(f"Query returned {len(results) if results else 0} result(s)")
+        
+        if results:
+            entity_data = dict(results[0])
+            
+            # Log what was found for debugging
+            db_name = entity_data.get('name', 'N/A')
+            db_alias = entity_data.get('alias', 'N/A')
+            image_url = entity_data.get('image_url', 'N/A')
+            logo_url = entity_data.get('logo_url', 'N/A')
+            logger.info(f"Found entity - DB name: '{db_name}', Alias: '{db_alias}', QID: {entity_data.get('qid')}")
+            logger.info(f"Image URLs - image_url: '{image_url}', logo_url: '{logo_url}'")
+            
+            # Convert datetime objects to strings for JSON serialization
+            # Also handle empty strings for image URLs
+            for key, value in entity_data.items():
+                if hasattr(value, 'isoformat'):
+                    entity_data[key] = value.isoformat()
+                elif value is None:
+                    entity_data[key] = None
+                elif key in ['image_url', 'logo_url'] and value == '':
+                    # Convert empty strings to None for image URLs
+                    entity_data[key] = None
+                    logger.debug(f"Converted empty {key} to None")
+            
+            logger.info(f"Successfully retrieved wikidata for entity: '{entity_name}' (matched to DB name: '{db_name}')")
+            return {"found": True, "data": entity_data}
+        else:
+            logger.warning(f"No wikidata found in entity_wikidata table for entity: '{entity_name}'")
+            
+            # Debug: Try to find what's actually in the database
+            try:
+                debug_query = """
+                    SELECT name, alias, qid
+                    FROM entity_wikidata 
+                    WHERE LOWER(TRIM(name)) LIKE LOWER(%s)
+                       OR (alias IS NOT NULL AND LOWER(TRIM(alias)) LIKE LOWER(%s))
+                    LIMIT 10
+                """
+                # Try with first significant word
+                words = [w for w in entity_name.split() if len(w) > 2]
+                first_word = words[0] if words else entity_name[:10]
+                debug_pattern = f"%{first_word}%"
+                debug_results = neon_db.execute_query(debug_query, (debug_pattern, debug_pattern))
+                if debug_results:
+                    logger.info(f"Similar entities in database (searching for '{first_word}'):")
+                    for row in debug_results:
+                        logger.info(f"  - Name: '{row.get('name')}', Alias: '{row.get('alias')}', QID: {row.get('qid')}")
+            except Exception as debug_err:
+                logger.debug(f"Debug query failed: {debug_err}")
+            
+            return {"found": False, "data": None}
+            
+    except Exception as e:
+        logger.error(f"Error fetching entity wikidata for '{entity_name}': {e}")
+        logger.exception(e)  # Log full traceback
+        raise
+
+
+def search_entity_wikidata(search_term: str, limit: int = 10) -> Dict[str, Any]:
+    """
+    Search for entities in the wikidata table.
+    Returns multiple matches for autocomplete/search functionality.
+    
+    Args:
+        search_term: The search term to look for
+        limit: Maximum number of results to return
+        
+    Returns:
+        Dict with 'results' list of matching entities
+    """
+    from neon_database import neon_db
+    
+    logger.info(f"Searching wikidata for: {search_term}")
+    
+    if not neon_db.is_configured():
+        logger.warning("Neon database not configured")
+        return {"results": [], "error": "Wikidata database not configured"}
+    
+    try:
+        query = """
+            SELECT 
+                qid, name, alias, description, instance_of_label,
+                image_url, wikipedia_url
+            FROM entity_wikidata
+            WHERE LOWER(name) LIKE LOWER(%s)
+               OR LOWER(alias) LIKE LOWER(%s)
+            ORDER BY 
+                CASE WHEN LOWER(name) = LOWER(%s) THEN 0 
+                     WHEN LOWER(name) LIKE LOWER(%s) THEN 1 
+                     ELSE 2 END,
+                LENGTH(name)
+            LIMIT %s
+        """
+        
+        search_pattern = f"%{search_term}%"
+        starts_with_pattern = f"{search_term}%"
+        
+        results = neon_db.execute_query(
+            query, 
+            (search_pattern, search_pattern, search_term, starts_with_pattern, limit)
+        )
+        
+        entities = []
+        for row in results:
+            entity = dict(row)
+            entities.append({
+                "qid": entity.get("qid"),
+                "name": entity.get("name"),
+                "alias": entity.get("alias"),
+                "description": entity.get("description"),
+                "type": entity.get("instance_of_label"),
+                "image_url": entity.get("image_url"),
+                "wikipedia_url": entity.get("wikipedia_url")
+            })
+        
+        logger.info(f"Found {len(entities)} wikidata matches for: {search_term}")
+        return {"results": entities, "count": len(entities)}
+        
+    except Exception as e:
+        logger.error(f"Error searching entity wikidata: {e}")
+        raise
+

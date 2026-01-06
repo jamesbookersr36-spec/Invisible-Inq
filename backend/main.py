@@ -8,7 +8,7 @@ from typing import Optional, List
 import time
 import logging
 from config import Config
-from services import get_all_stories, get_graph_data, get_graph_data_by_section_and_country, search_with_ai, get_story_statistics, get_all_node_types, get_calendar_data, get_cluster_data
+from services import get_all_stories, get_graph_data, get_graph_data_by_section_and_country, search_with_ai, get_story_statistics, get_all_node_types, get_calendar_data, get_cluster_data, get_entity_wikidata, search_entity_wikidata
 from models import GraphData
 from pydantic import BaseModel
 
@@ -255,8 +255,111 @@ async def get_node_types():
             detail=f"Error fetching node types: {str(e)}"
         )
 
+
+# ============== Entity Wikidata Endpoints ==============
+
+@app.get("/api/entity/wikidata/{entity_name}")
+async def get_entity_wikidata_by_name(entity_name: str):
+    """
+    Get detailed wikidata information for an entity by name.
+    Returns comprehensive information from the entity_wikidata table in the wuhan database.
+    """
+    try:
+        from urllib.parse import unquote
+        
+        # Decode URL-encoded entity name
+        entity_name = unquote(entity_name)
+        
+        if not entity_name or not entity_name.strip():
+            raise HTTPException(status_code=400, detail="Entity name is required")
+        
+        logger.info(f"API endpoint called - entity_name: '{entity_name}'")
+        
+        result = get_entity_wikidata(entity_name.strip())
+        
+        logger.info(f"API response - found: {result.get('found')}, has_data: {bool(result.get('data'))}")
+        
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception(f"Error fetching entity wikidata for '{entity_name}': {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error fetching entity wikidata: {str(e)}"
+        )
+
+
+@app.get("/api/entity/wikidata")
+async def search_entity_wikidata_endpoint(name: Optional[str] = None, q: Optional[str] = None, limit: int = 10):
+    """
+    Search for entities in the wikidata table.
+    Supports both 'name' and 'q' query parameters for flexibility.
+    
+    Args:
+        name: Entity name to search for
+        q: Alternative query parameter for search
+        limit: Maximum number of results (default: 10, max: 50)
+    """
+    try:
+        search_term = name or q
+        if not search_term or not search_term.strip():
+            raise HTTPException(status_code=400, detail="Search term is required (use 'name' or 'q' parameter)")
+        
+        # Limit the results to prevent abuse
+        actual_limit = min(max(1, limit), 50)
+        
+        result = search_entity_wikidata(search_term.strip(), actual_limit)
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception(f"Error searching entity wikidata: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error searching entity wikidata: {str(e)}"
+        )
+
+
 class SearchQuery(BaseModel):
     query: str
+
+class SummaryRequest(BaseModel):
+    query: str  # User's question about the graph
+    graphData: dict  # The current graph data with nodes and links
+
+@app.post("/api/ai/summary", response_model=dict)
+async def generate_ai_summary(request: SummaryRequest):
+    """
+    Generate an AI summary of graph data with embedded entity markers.
+    
+    The summary will use [[Entity Name]] markers for entities that exist in the graph,
+    allowing the frontend to render them as clickable buttons.
+    """
+    try:
+        if not request.query or not request.query.strip():
+            raise HTTPException(status_code=400, detail="Query is required")
+        
+        if not request.graphData:
+            raise HTTPException(status_code=400, detail="Graph data is required")
+        
+        from services import generate_graph_summary
+        
+        summary_data = generate_graph_summary(
+            query=request.query.strip(),
+            graph_data=request.graphData
+        )
+        
+        return summary_data
+        
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception(f"Error generating AI summary: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error generating AI summary: {str(e)}"
+        )
 
 @app.post("/api/ai/search", response_model=dict)
 async def ai_search(search_query: SearchQuery):

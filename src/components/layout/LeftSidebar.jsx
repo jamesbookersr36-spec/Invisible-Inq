@@ -19,12 +19,14 @@ const LeftSidebar = ({
   onNext,
   onCollapseChange = () => {},
   onAISearch = null,
+  onAISummary = null,
   graphData = { nodes: [], links: [] },
   onEntityHighlight = null
 }) => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   const [topSearchQuery, setTopSearchQuery] = useState('');
+  const [bottomQuery, setBottomQuery] = useState('');
   const sidebarRef = useRef(null);
   const [sidebarWidth, setSidebarWidth] = useState(320);
 
@@ -515,17 +517,33 @@ const LeftSidebar = ({
           </div>
         )}
 
-        {}
+        {/* Bottom Ask AI Section */}
         <div className="w-full relative">
           <textarea
+            value={bottomQuery}
+            onChange={(e) => setBottomQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey && bottomQuery.trim() && onAISummary) {
+                e.preventDefault();
+                onAISummary(bottomQuery.trim());
+                setBottomQuery('');
+              }
+            }}
             placeholder="Ask AI about this graph..."
             rows={3}
             className="w-full py-2 pl-3 pr-10 text-[#EFEFF0] bg-[#131315] border border-[#666666]
             rounded-[5px] text-sm placeholder:text-gray-600 focus:outline-none focus:ring-2 focus:ring-[#434343] resize-none"
           />
           <button
-            className="absolute right-3 top-3 text-white hover:text-[#2699FB] transition-colors"
-            title="Search with AI"
+            onClick={() => {
+              if (bottomQuery.trim() && onAISummary) {
+                onAISummary(bottomQuery.trim());
+                setBottomQuery('');
+              }
+            }}
+            disabled={!bottomQuery.trim()}
+            className="absolute right-3 top-3 text-white hover:text-[#2699FB] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Ask AI about this graph"
           >
             <FaSearch size={14} />
           </button>

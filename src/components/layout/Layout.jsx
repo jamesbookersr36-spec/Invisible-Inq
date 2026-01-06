@@ -37,6 +37,7 @@ const Layout = ({
   showRightSidebar = true,
   onToggleRightSidebar = () => {},
   onAISearch = null,
+  onAISummary = null,
   graphData = { nodes: [], links: [] },
   onEntityHighlight = null,
   rightSidebarActiveTab = 'node-properties',
@@ -116,6 +117,7 @@ const Layout = ({
           onNext={onNext}
           onCollapseChange={handleLeftSidebarCollapse}
           onAISearch={onAISearch}
+          onAISummary={onAISummary}
           graphData={graphData}
           onEntityHighlight={onEntityHighlight}
         />
