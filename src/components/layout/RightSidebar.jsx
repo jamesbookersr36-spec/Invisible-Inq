@@ -1265,7 +1265,7 @@ const RightSidebar = ({
             <div className="w-full flex-shrink-0 min-h-[300px] max-h-[300px]">
               <GlobalActivity graphData={graphData} currentSubstory={currentSubstory} selectedSection={selectedSection} />
             </div>
-            <div className="w-full flex-shrink-0 mt-0 mb-1 aspect-square min-h-full">
+            <div className="w-full flex-1 mt-0 mb-1 min-h-0" style={{ aspectRatio: '1 / 1' }}>
               <ConnectedData 
                 onSectionClick={onSectionClick} 
                 graphData={graphData} 
