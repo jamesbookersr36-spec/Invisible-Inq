@@ -64,6 +64,7 @@ if __name__ == "__main__":
     backend_dir = os.path.dirname(os.path.abspath(__file__))
     
     # Run uvicorn with watchfiles reloader and longer delays for Windows
+    # Increase request body size limit to 50MB (default is 1MB)
     config = {
         "app": "main:app",
         "host": Config.BACKEND_HOST,
@@ -72,7 +73,10 @@ if __name__ == "__main__":
         "reload_dirs": [backend_dir],
         "reload_delay": 1.0,  # Longer delay for Windows
         "log_level": "info",
-        "timeout_graceful_shutdown": 10
+        "timeout_graceful_shutdown": 10,
+        "limit_concurrency": 1000,
+        "limit_max_requests": 10000,
+        "limit_max_requests_jitter": 1000
     }
     
     # On Windows, use a single reload dir and longer timeout

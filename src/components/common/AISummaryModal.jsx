@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { FaTimes, FaSpinner, FaExclamationTriangle, FaSearch, FaRedo } from 'react-icons/fa';
 import { getNodeTypeColor } from '../../utils/colorUtils';
 
@@ -35,8 +35,16 @@ const AISummaryModal = ({
     if (!isOpen) {
       setSummary(null);
       setError(null);
+      renderedEntitiesRef.current.clear();
     }
   }, [isOpen]);
+
+  // Reset rendered entities when summary changes
+  useEffect(() => {
+    if (summary) {
+      renderedEntitiesRef.current.clear();
+    }
+  }, [summary]);
 
   const fetchSummary = useCallback(async (searchQuery) => {
     if (!searchQuery?.trim() || !graphData) {
@@ -49,6 +57,21 @@ const AISummaryModal = ({
     setSummary(null);
 
     try {
+      // Optimize graphData to send only essential information
+      const optimizedGraphData = {
+        nodes: (graphData.nodes || []).map(node => ({
+          id: node.id,
+          name: node.name || node['Entity Name'] || node.entity_name || node.id,
+          type: node.node_type || node.type || node.category || 'Unknown',
+          label: node.label || node.name || node.id
+        })),
+        links: (graphData.links || []).map(link => ({
+          source: link.source?.id || link.sourceId || link.source,
+          target: link.target?.id || link.targetId || link.target,
+          type: link.type || link.relationship || 'Unknown'
+        }))
+      };
+
       const response = await fetch(`${apiBaseUrl}/api/ai/summary`, {
         method: 'POST',
         headers: {
@@ -56,7 +79,7 @@ const AISummaryModal = ({
         },
         body: JSON.stringify({
           query: searchQuery.trim(),
-          graphData: graphData
+          graphData: optimizedGraphData
         }),
       });
 
@@ -102,9 +125,15 @@ const AISummaryModal = ({
     return map;
   }, [graphData]);
 
+  // Track which entities have been rendered to avoid duplicates (use ref to persist across renders)
+  const renderedEntitiesRef = useRef(new Set());
+
   // Parse summary text and render [[Entity]] as clickable buttons
   const renderSummaryWithButtons = useCallback((text) => {
     if (!text) return null;
+
+    // Reset rendered entities for each new summary render
+    renderedEntitiesRef.current.clear();
 
     // Split by [[...]] pattern
     const parts = text.split(/(\[\[[^\]]+\]\])/g);
@@ -115,7 +144,32 @@ const AISummaryModal = ({
       
       if (entityMatch) {
         const entityName = entityMatch[1];
-        const node = entityNodeMap.get(entityName.toLowerCase());
+        const entityKey = entityName.toLowerCase();
+        
+        // Check if this entity has already been rendered
+        if (renderedEntitiesRef.current.has(entityKey)) {
+          // Entity already rendered - just show as plain text with link styling
+          return (
+            <span
+              key={`entity-duplicate-${index}`}
+              className="text-[#6EA4F4] hover:underline cursor-pointer"
+              onClick={() => {
+                const node = entityNodeMap.get(entityKey);
+                if (node && onEntityClick) {
+                  onEntityClick(node);
+                }
+              }}
+              title={`Click to highlight ${entityName} in graph`}
+            >
+              {entityName}
+            </span>
+          );
+        }
+        
+        // Mark as rendered
+        renderedEntitiesRef.current.add(entityKey);
+        
+        const node = entityNodeMap.get(entityKey);
         
         if (node) {
           const nodeType = node.node_type || node.type || 'Entity';
@@ -148,7 +202,7 @@ const AISummaryModal = ({
             <span 
               key={`entity-notfound-${index}`}
               className="inline-flex items-center px-2 py-0.5 mx-0.5 text-sm font-medium 
-                         rounded-full bg-[#333] text-[#999] border border-[#444]"
+                         rounded-full bg-[#1a1a1a] text-[#707070] border border-[#404040]"
               title={`${entityName} (not found in current graph)`}
             >
               {entityName}
@@ -165,47 +219,47 @@ const AISummaryModal = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[100] p-4">
-      <div className="bg-[#0A0A0C] border border-[#333] rounded-xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col text-white overflow-hidden">
+    <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[100] p-4">
+      <div className="bg-[#09090B] border border-[#707070] rounded-lg shadow-lg w-full max-w-4xl max-h-[90vh] flex flex-col text-white overflow-hidden">
         {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-[#333] flex-shrink-0">
+        <div className="flex items-center justify-between p-4 border-b border-[#707070] flex-shrink-0">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#4F46E5] to-[#7C3AED] flex items-center justify-center">
-              <FaSearch className="text-white" size={14} />
+            <div className="w-8 h-8 rounded-lg bg-[#1a1a1a] border border-[#404040] flex items-center justify-center">
+              <FaSearch className="text-[#B4B4B4]" size={14} />
             </div>
             <div>
-              <h2 className="text-lg font-semibold">AI Analysis</h2>
-              <p className="text-xs text-[#888]">Ask questions about your graph data</p>
+              <h2 className="text-lg font-semibold text-white">AI Analysis</h2>
+              <p className="text-xs text-[#707070]">Ask questions about your graph data</p>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-[#222] rounded-lg transition-colors"
+            className="p-2 hover:bg-[#1a1a1a] rounded-lg transition-colors"
             title="Close"
           >
-            <FaTimes className="text-[#888] hover:text-white" size={18} />
+            <FaTimes className="text-[#B4B4B4] hover:text-white" size={18} />
           </button>
         </div>
 
         {/* Search Input */}
-        <form onSubmit={handleSubmit} className="p-4 border-b border-[#333] flex-shrink-0">
+        <form onSubmit={handleSubmit} className="p-4 border-b border-[#707070] flex-shrink-0">
           <div className="relative">
             <input
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Ask a question about this graph..."
-              className="w-full pl-4 pr-12 py-3 bg-[#131315] border border-[#444] rounded-lg 
-                         text-white placeholder:text-[#666] focus:outline-none focus:border-[#4F46E5]
-                         focus:ring-2 focus:ring-[#4F46E5]/20 transition-all"
+              className="w-full pl-4 pr-12 py-3 bg-[#1a1a1a] border border-[#404040] rounded-lg 
+                         text-white placeholder:text-[#707070] focus:outline-none focus:border-[#5C9EFF]
+                         focus:ring-1 focus:ring-[#5C9EFF]/30 transition-all"
               disabled={loading}
             />
             <button
               type="submit"
               disabled={loading || !query.trim()}
               className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-lg
-                         bg-[#4F46E5] hover:bg-[#4338CA] disabled:bg-[#333] disabled:cursor-not-allowed
-                         transition-colors"
+                         bg-[#5C9EFF] hover:bg-[#7BB3FF] disabled:bg-[#1a1a1a] disabled:cursor-not-allowed
+                         disabled:border disabled:border-[#404040] transition-colors"
               title="Generate Summary"
             >
               {loading ? (
@@ -216,7 +270,7 @@ const AISummaryModal = ({
             </button>
           </div>
           {graphData && (
-            <div className="mt-2 text-xs text-[#666]">
+            <div className="mt-2 text-xs text-[#707070]">
               Analyzing {graphData.nodes?.length || 0} nodes and {graphData.links?.length || 0} relationships
             </div>
           )}
@@ -226,29 +280,29 @@ const AISummaryModal = ({
         <div className="flex-1 overflow-y-auto p-4 min-h-[200px]">
           {/* Loading State */}
           {loading && (
-            <div className="flex flex-col items-center justify-center h-full gap-3 text-[#888]">
+            <div className="flex flex-col items-center justify-center h-full gap-3 text-[#707070]">
               <div className="relative">
-                <div className="w-12 h-12 rounded-full border-2 border-[#333]" />
-                <div className="absolute inset-0 w-12 h-12 rounded-full border-2 border-t-[#4F46E5] animate-spin" />
+                <div className="w-12 h-12 rounded-full border-2 border-[#404040]" />
+                <div className="absolute inset-0 w-12 h-12 rounded-full border-2 border-t-[#5C9EFF] animate-spin" />
               </div>
-              <p className="text-sm">Analyzing graph data...</p>
+              <p className="text-sm text-[#B4B4B4]">Analyzing graph data...</p>
             </div>
           )}
 
           {/* Error State */}
           {error && !loading && (
             <div className="flex flex-col items-center justify-center h-full gap-4">
-              <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center">
-                <FaExclamationTriangle className="text-red-500" size={20} />
+              <div className="w-12 h-12 rounded-full bg-[#1a1a1a] border border-[#404040] flex items-center justify-center">
+                <FaExclamationTriangle className="text-[#F03E3E]" size={20} />
               </div>
               <div className="text-center">
-                <p className="text-red-400 font-medium mb-1">Error</p>
-                <p className="text-sm text-[#888] max-w-md">{error}</p>
+                <p className="text-[#F03E3E] font-medium mb-1">Error</p>
+                <p className="text-sm text-[#707070] max-w-md">{error}</p>
               </div>
               <button
                 onClick={handleRetry}
-                className="flex items-center gap-2 px-4 py-2 bg-[#222] hover:bg-[#333] 
-                           rounded-lg text-sm transition-colors"
+                className="flex items-center gap-2 px-4 py-2 bg-[#1a1a1a] hover:bg-[#2a2a2a] 
+                           border border-[#404040] rounded-lg text-sm text-[#B4B4B4] transition-colors"
               >
                 <FaRedo size={12} />
                 Try Again
@@ -261,60 +315,67 @@ const AISummaryModal = ({
             <div className="space-y-4">
               {/* Query Badge */}
               <div className="flex items-start gap-2">
-                <span className="px-2 py-1 bg-[#4F46E5]/20 text-[#A5B4FC] text-xs rounded-full flex-shrink-0">
+                <span className="px-2 py-1 bg-[#1a1a1a] border border-[#404040] text-[#B4B4B4] text-xs rounded-full flex-shrink-0">
                   Q
                 </span>
                 <p className="text-sm text-[#B4B4B4]">{summary.query}</p>
               </div>
 
               {/* Summary Text with Entity Buttons */}
-              <div className="bg-[#111] rounded-lg p-4 border border-[#222]">
+              <div className="bg-[#1a1a1a] rounded-lg p-4 border border-[#404040]">
                 <div className="flex items-start gap-2">
-                  <span className="px-2 py-1 bg-[#22C55E]/20 text-[#86EFAC] text-xs rounded-full flex-shrink-0 mt-0.5">
+                  <span className="px-2 py-1 bg-[#1a1a1a] border border-[#404040] text-[#B4B4B4] text-xs rounded-full flex-shrink-0 mt-0.5">
                     A
                   </span>
-                  <div className="text-[#E5E5E5] leading-relaxed text-sm whitespace-pre-wrap">
+                  <div className="text-[#F4F4F5] leading-relaxed text-sm whitespace-pre-wrap">
                     {renderSummaryWithButtons(summary.summary)}
                   </div>
                 </div>
               </div>
 
               {/* Mentioned Entities */}
-              {summary.entities && summary.entities.length > 0 && (
-                <div className="bg-[#0D0D0F] rounded-lg p-3 border border-[#1a1a1a]">
-                  <p className="text-xs text-[#666] mb-2">
-                    Entities mentioned ({summary.entities.length}):
-                  </p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {summary.entities.map((entity, idx) => {
-                      const node = entityNodeMap.get(entity.name.toLowerCase());
-                      const nodeType = node?.node_type || node?.type || 'Entity';
-                      const color = getNodeTypeColor(nodeType);
-                      
-                      return (
-                        <button
-                          key={idx}
-                          onClick={() => node && onEntityClick && onEntityClick(node)}
-                          className="px-2 py-1 text-xs rounded-full text-white hover:opacity-80 
-                                     transition-opacity cursor-pointer"
-                          style={{ backgroundColor: color }}
-                        >
-                          {entity.name}
-                        </button>
-                      );
-                    })}
+              {summary.entities && summary.entities.length > 0 && (() => {
+                // Filter out duplicate entities by name (case-insensitive)
+                const uniqueEntities = summary.entities.filter((entity, index, self) => 
+                  index === self.findIndex(e => e.name.toLowerCase() === entity.name.toLowerCase())
+                );
+                
+                return (
+                  <div className="bg-[#1a1a1a] rounded-lg p-3 border border-[#404040]">
+                    <p className="text-xs text-[#707070] mb-2">
+                      Entities mentioned ({uniqueEntities.length}):
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {uniqueEntities.map((entity, idx) => {
+                        const node = entityNodeMap.get(entity.name.toLowerCase());
+                        const nodeType = node?.node_type || node?.type || 'Entity';
+                        const color = getNodeTypeColor(nodeType);
+                        
+                        return (
+                          <button
+                            key={idx}
+                            onClick={() => node && onEntityClick && onEntityClick(node)}
+                            className="px-2 py-1 text-xs rounded-full text-white hover:opacity-80 
+                                       transition-opacity cursor-pointer"
+                            style={{ backgroundColor: color }}
+                          >
+                            {entity.name}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* Stats Footer */}
-              <div className="flex items-center justify-between text-xs text-[#666] pt-2 border-t border-[#222]">
+              <div className="flex items-center justify-between text-xs text-[#707070] pt-2 border-t border-[#404040]">
                 <span>
                   Based on {summary.node_count} nodes, {summary.link_count} relationships
                 </span>
                 <button
                   onClick={handleRetry}
-                  className="flex items-center gap-1 hover:text-white transition-colors"
+                  className="flex items-center gap-1 hover:text-[#B4B4B4] transition-colors"
                 >
                   <FaRedo size={10} />
                   Regenerate
@@ -325,9 +386,9 @@ const AISummaryModal = ({
 
           {/* Empty State */}
           {!loading && !error && !summary && (
-            <div className="flex flex-col items-center justify-center h-full gap-3 text-[#666]">
+            <div className="flex flex-col items-center justify-center h-full gap-3 text-[#707070]">
               <FaSearch size={32} className="opacity-30" />
-              <p className="text-sm text-center">
+              <p className="text-sm text-center text-[#B4B4B4]">
                 Enter a question above to get an AI-powered<br />
                 analysis of your graph data
               </p>

@@ -63,9 +63,14 @@ app = FastAPI(
     title="Graph Visualization API",
     description="API for serving graph data from Neo4j database",
     version="1.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
+# Note: Request body size limit is controlled by uvicorn/hypercorn
+# To increase it, use: uvicorn.run(..., limit_max_requests=10000)
+# Or set environment variable: UVICORN_LIMIT_MAX_REQUESTS=10000
+# The default limit is usually sufficient, but for very large graphs,
+# you may need to increase it at the server level
 app.add_middleware(
     CORSMiddleware,
     allow_origins=Config.CORS_ORIGINS,
