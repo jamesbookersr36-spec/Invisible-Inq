@@ -62,6 +62,11 @@ const RightSidebar = ({
   const [sortOrder, setSortOrder] = useState(externalSortOrder);
   const [sortNodeCategory, setSortNodeCategory] = useState(externalSortNodeCategory);
   const [sortNodeProperty, setSortNodeProperty] = useState(externalSortNodeProperty);
+  
+  // Wikidata state for entity images
+  const [wikidataInfo, setWikidataInfo] = useState(null);
+  const [wikidataImageUrl, setWikidataImageUrl] = useState(null);
+  const [wikidataLoading, setWikidataLoading] = useState(false);
 
   // Sync external sortBy with local state
   useEffect(() => {
@@ -258,6 +263,135 @@ const RightSidebar = ({
   const displayNode = isMultiSelect ? (currentItem?.type === 'node' ? currentItem.data : null) : selectedNode;
   const displayEdge = isMultiSelect ? (currentItem?.type === 'edge' ? currentItem.data : null) : selectedEdge;
   
+  // Get entity name for wikidata lookup
+  const entityName = displayNode?.name || displayNode?.['Entity Name'] || displayNode?.entity_name || displayNode?.id || null;
+  const isEntityNode = displayNode && (displayNode.node_type?.toLowerCase().includes('entity') || displayNode.type?.toLowerCase().includes('entity'));
+  
+  // Function to fetch direct image URL from Wikimedia Commons API
+  const fetchDirectImageUrl = async (url) => {
+    try {
+      url = url.replace(/^http:/, 'https:');
+      
+      if (url.includes('upload.wikimedia.org')) {
+        return url;
+      }
+      
+      if (url.includes('commons.wikimedia.org')) {
+        let filename = null;
+        
+        const specialFilePathMatch = url.match(/Special:FilePath\/(.+?)(?:\?|#|$)/);
+        if (specialFilePathMatch) {
+          try {
+            filename = decodeURIComponent(specialFilePathMatch[1]);
+          } catch (e) {
+            filename = specialFilePathMatch[1].replace(/%20/g, ' ').replace(/%2F/g, '/');
+          }
+        } else {
+          const fileMatch = url.match(/\/wiki\/File:(.+?)(?:\?|#|$)/);
+          if (fileMatch) {
+            try {
+              filename = decodeURIComponent(fileMatch[1]);
+            } catch (e) {
+              filename = fileMatch[1].replace(/%20/g, ' ').replace(/%2F/g, '/');
+            }
+          }
+        }
+        
+        if (filename) {
+          filename = filename.replace(/%20/g, ' ').replace(/\+/g, ' ').trim();
+          const fileTitle = filename.replace(/ /g, '_');
+          const apiUrl = `https://commons.wikimedia.org/w/api.php?action=query&titles=File:${encodeURIComponent(fileTitle)}&prop=imageinfo&iiprop=url&format=json&origin=*`;
+          
+          try {
+            const response = await fetch(apiUrl);
+            const data = await response.json();
+            
+            const pages = data.query?.pages;
+            if (pages) {
+              const pageId = Object.keys(pages)[0];
+              const imageInfo = pages[pageId]?.imageinfo;
+              if (imageInfo && imageInfo[0]?.url) {
+                return imageInfo[0].url;
+              }
+            }
+          } catch (apiError) {
+            console.warn('Wikimedia API call failed:', apiError);
+          }
+        }
+      }
+      
+      return url;
+    } catch (e) {
+      console.error('Error converting Wikimedia URL:', e);
+      return url;
+    }
+  };
+  
+  // Fetch wikidata when displayNode changes (for entity nodes)
+  useEffect(() => {
+    const fetchWikidata = async () => {
+      if (!isEntityNode || !entityName || entityName === 'Unknown') {
+        setWikidataInfo(null);
+        setWikidataImageUrl(null);
+        return;
+      }
+      
+      setWikidataLoading(true);
+      
+      try {
+        const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+        const response = await fetch(
+          `${apiBaseUrl}/api/entity/wikidata/${encodeURIComponent(entityName)}`,
+          { 
+            method: 'GET',
+            headers: { 'Content-Type': 'application/json' }
+          }
+        );
+        
+        if (response.ok) {
+          const result = await response.json();
+          if (result.found && result.data) {
+            setWikidataInfo(result.data);
+            
+            // Get image URL from wikidata
+            const rawImageUrl = result.data.image_url || result.data.logo_url || null;
+            if (rawImageUrl) {
+              // Normalize URL
+              let normalizedUrl = String(rawImageUrl).trim();
+              if (normalizedUrl.startsWith('http://')) {
+                normalizedUrl = normalizedUrl.replace(/^http:/, 'https:');
+              }
+              
+              // If it's a Wikimedia Commons URL, convert it
+              if (normalizedUrl.includes('commons.wikimedia.org')) {
+                const directUrl = await fetchDirectImageUrl(normalizedUrl);
+                setWikidataImageUrl(directUrl);
+              } else {
+                setWikidataImageUrl(normalizedUrl);
+              }
+            } else {
+              setWikidataImageUrl(null);
+            }
+          } else {
+            setWikidataInfo(null);
+            setWikidataImageUrl(null);
+          }
+        }
+      } catch (err) {
+        console.error('Wikidata fetch error:', err);
+        setWikidataInfo(null);
+        setWikidataImageUrl(null);
+      } finally {
+        setWikidataLoading(false);
+      }
+    };
+
+    fetchWikidata();
+  }, [entityName, isEntityNode]);
+  
+  // Determine which image to display (prioritize wikidata image)
+  const displayImageUrl = wikidataImageUrl || displayNode?.IMG_SRC || null;
+  
   const filteredNodeProperties = displayNode
     ? Object.entries(displayNode)
         .filter(([key, value]) => (
@@ -366,7 +500,8 @@ const RightSidebar = ({
           <div className="flex flex-row h-full">
           {}
           <div className="flex-shrink-0 w-1/3 pr-2 h-full flex items-center">
-            {displayNode && (
+            {/* Only show image at top for non-entity nodes */}
+            {displayNode && !isEntityNode && (
               <div className="p-2 bg-[#09090B] rounded shadow-sm flex justify-center border border-[#707070] w-full">
                 <div className="w-24 h-24 bg-gray-800 rounded-full overflow-hidden flex items-center justify-center">
                   {displayNode?.IMG_SRC ? (
@@ -402,7 +537,7 @@ const RightSidebar = ({
 
           {/* Details for Mobile (Node or Edge) */}
               {(displayNode || displayEdge) && (
-            <div className="flex-1 overflow-hidden pl-2 flex flex-col min-h-0">
+            <div className="flex-1 overflow-y-auto pl-2 flex flex-col min-h-0">
                 {/* Item Type Header (for multi-select) */}
                 {isMultiSelect && (
                   <div className="mb-2 px-2 py-1 bg-[#1A1A1A] rounded border border-[#404040]">
@@ -412,8 +547,203 @@ const RightSidebar = ({
                   </div>
                 )}
                 
-                {/* Node Properties */}
-                {displayNode && filteredNodeProperties.length > 0 && (
+                {/* Wikidata Information Section (for Entity Nodes) */}
+                {displayNode && isEntityNode && wikidataInfo && (
+                  <div className="mb-4 flex flex-col space-y-3 pb-4">
+                    <div className="flex flex-row">
+                      {/* Left Line */}
+                      <div className="w-0.5 bg-[#358EE2] flex-shrink-0 ml-3 mr-3" style={{ minHeight: '100%' }}></div>
+                      
+                      {/* Content */}
+                      <div className="flex-1 flex flex-col">
+                        {/* Entity Name */}
+                        <h2 className="text-xl font-bold text-white mb-1">
+                          {wikidataInfo.name || entityName}
+                        </h2>
+                    
+                    {/* Alias and Type */}
+                    <div className="flex flex-col gap-1 mb-2">
+                      {wikidataInfo.alias && (
+                        <p className="text-sm text-[#B4B4B4]">
+                          Alias: <span className="text-white">{wikidataInfo.alias}</span>
+                        </p>
+                      )}
+                      {wikidataInfo.instance_of_label && (
+                        <p className="text-sm text-[#B4B4B4]">
+                          {wikidataInfo.sex_or_gender_label ? `${wikidataInfo.sex_or_gender_label} - ` : ''}
+                          {wikidataInfo.instance_of_label}
+                        </p>
+                      )}
+                    </div>
+                    
+                    {/* Image - Displayed after alias/type, before "Listed in" */}
+                    {displayImageUrl && (
+                      <div className="mb-3 flex justify-start">
+                        <div className="w-32 h-32 bg-gray-800 rounded-lg overflow-hidden flex items-center justify-center">
+                          {wikidataLoading ? (
+                            <div className="w-full h-full bg-gray-800 flex items-center justify-center">
+                              <svg className="animate-spin w-8 h-8 text-[#B4B4B4]" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                            </div>
+                          ) : (
+                            <img
+                              src={displayImageUrl}
+                              alt={wikidataInfo.name || entityName}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                console.error('Image failed to load in RightSidebar:', displayImageUrl);
+                                e.target.style.display = 'none';
+                              }}
+                            />
+                          )}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Listed In / Category */}
+                    {wikidataInfo.instance_of_label && (
+                      <div className="mb-2">
+                        <p className="text-xs text-[#7D7D7D] mb-1">Listed in:</p>
+                        <div className="inline-block px-1 bg-[#1A1A1A] rounded-[4px]">
+                          <div className="text-[12px] text-white p-0.5">{wikidataInfo.instance_of_label}</div>
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* Description */}
+                    {wikidataInfo.description && (
+                      <p className="text-sm text-[#F4F4F5] leading-relaxed mb-3">
+                        {wikidataInfo.description}
+                      </p>
+                    )}
+                    
+                    {/* Key-Value Pairs */}
+                    <div className="flex flex-col space-y-2">
+                      {wikidataInfo.country_label && (
+                        <div className="grid grid-cols-[1fr_2fr] gap-2 items-start">
+                          <span className="text-xs text-[#7D7D7D]">Country Label:</span>
+                          <span className="text-sm text-[#F4F4F5]">{wikidataInfo.country_label}</span>
+                        </div>
+                      )}
+                      {wikidataInfo.headquarters_label && (
+                        <div className="grid grid-cols-[1fr_2fr] gap-2 items-start">
+                          <span className="text-xs text-[#7D7D7D]">Headquarters Label:</span>
+                          <span className="text-sm text-[#F4F4F5]">{wikidataInfo.headquarters_label}</span>
+                        </div>
+                      )}
+                      {wikidataInfo.place_of_birth_label && (
+                        <div className="grid grid-cols-[1fr_2fr] gap-2 items-start">
+                          <span className="text-xs text-[#7D7D7D]">Place of Birth:</span>
+                          <span className="text-sm text-[#F4F4F5]">{wikidataInfo.place_of_birth_label}</span>
+                        </div>
+                      )}
+                      {wikidataInfo.founded_by_label && (
+                        <div className="grid grid-cols-[1fr_2fr] gap-2 items-start">
+                          <span className="text-xs text-[#7D7D7D]">Founded By:</span>
+                          <span className="text-sm text-[#F4F4F5]">{wikidataInfo.founded_by_label}</span>
+                        </div>
+                      )}
+                      {wikidataInfo.industry_label && (
+                        <div className="grid grid-cols-[1fr_2fr] gap-2 items-start">
+                          <span className="text-xs text-[#7D7D7D]">Industry:</span>
+                          <span className="text-sm text-[#F4F4F5]">{wikidataInfo.industry_label}</span>
+                        </div>
+                      )}
+                      {wikidataInfo.end_time && (
+                        <div className="grid grid-cols-[1fr_2fr] gap-2 items-start">
+                          <span className="text-xs text-[#7D7D7D]">End Time:</span>
+                          <span className="text-sm text-[#F4F4F5]">
+                            {new Date(wikidataInfo.end_time).toLocaleDateString()}
+                          </span>
+                        </div>
+                      )}
+                      {wikidataInfo.award_received_label && (
+                        <div className="grid grid-cols-[1fr_2fr] gap-2 items-start">
+                          <span className="text-xs text-[#7D7D7D]">Awards Received:</span>
+                          <span className="text-sm text-[#F4F4F5]">{wikidataInfo.award_received_label}</span>
+                        </div>
+                      )}
+                      {wikidataInfo.occupation_label && (
+                        <div className="grid grid-cols-[1fr_2fr] gap-2 items-start">
+                          <span className="text-xs text-[#7D7D7D]">Occupation:</span>
+                          <span className="text-sm text-[#F4F4F5]">{wikidataInfo.occupation_label}</span>
+                        </div>
+                      )}
+                      {wikidataInfo.position_held_label && (
+                        <div className="grid grid-cols-[1fr_2fr] gap-2 items-start">
+                          <span className="text-xs text-[#7D7D7D]">Position:</span>
+                          <span className="text-sm text-[#F4F4F5]">{wikidataInfo.position_held_label}</span>
+                        </div>
+                      )}
+                      {wikidataInfo.educated_at_label && (
+                        <div className="grid grid-cols-[1fr_2fr] gap-2 items-start">
+                          <span className="text-xs text-[#7D7D7D]">Education:</span>
+                          <span className="text-sm text-[#F4F4F5]">{wikidataInfo.educated_at_label}</span>
+                        </div>
+                      )}
+                      {wikidataInfo.date_birth && (
+                        <div className="grid grid-cols-[1fr_2fr] gap-2 items-start">
+                          <span className="text-xs text-[#7D7D7D]">Date of Birth:</span>
+                          <span className="text-sm text-[#F4F4F5]">
+                            {new Date(wikidataInfo.date_birth).toLocaleDateString()}
+                          </span>
+                        </div>
+                      )}
+                      {wikidataInfo.citizenship_label && (
+                        <div className="grid grid-cols-[1fr_2fr] gap-2 items-start">
+                          <span className="text-xs text-[#7D7D7D]">Citizenship:</span>
+                          <span className="text-sm text-[#F4F4F5]">{wikidataInfo.citizenship_label}</span>
+                        </div>
+                      )}
+                    </div>
+                    
+                    {/* URL Links Section */}
+                    {(wikidataInfo.wikipedia_url || wikidataInfo.url || wikidataInfo.qid) && (
+                      <div className="mt-3 pt-3 border-t border-[#404040]">
+                        <p className="text-xs text-[#7D7D7D] mb-2">URL</p>
+                        <div className="flex flex-col gap-2">
+                          {wikidataInfo.wikipedia_url && (
+                            <a
+                              href={wikidataInfo.wikipedia_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[sm] text-[#6EA4F4] hover:underline"
+                            >
+                              Wikipedia Link
+                            </a>
+                          )}
+                          {wikidataInfo.url && (
+                            <a
+                              href={wikidataInfo.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-sm text-[#6EA4F4] hover:underline"
+                            >
+                              Social Link
+                            </a>
+                          )}
+                          {wikidataInfo.qid && (
+                            <a
+                              href={`https://www.wikidata.org/wiki/${wikidataInfo.qid}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-sm text-[#6EA4F4] hover:underline"
+                            >
+                              Wikidata Link
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                        </div>
+                      </div>
+                  </div>
+                )}
+                
+                {/* Node Properties - Only show for non-entity nodes, or for entity nodes when wikidata is not available */}
+                {displayNode && (!isEntityNode || (isEntityNode && !wikidataInfo)) && filteredNodeProperties.length > 0 && (
                   <div className="flex flex-col space-y-3">
                     {filteredNodeProperties.map(([key, value], index) => {
                       const isUrlProperty = key.toLowerCase().includes('url') || key.toLowerCase() === 'link' || key.toLowerCase().includes('website') || key.toLowerCase().includes('webpage');
@@ -510,26 +840,227 @@ const RightSidebar = ({
               {/* Show content when there's a selected node, edge, or multi-select items */}
               {((selectedNode || selectedEdge) || isMultiSelect) && (
                 <div className="flex flex-col h-full">
-                <div className="mb-4 p-2 bg-[#09090B] rounded shadow-sm flex justify-center w-full border border-[#707070] flex-shrink-0">
-                  <div className="w-20 h-20 bg-gray-800 rounded-full overflow-hidden flex items-center justify-center">
-                    {displayNode?.IMG_SRC ? (
-                      <img
-                        src={displayNode.IMG_SRC}
-                        alt={displayNode.name}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full bg-gray-800 flex items-center justify-center">
-                        <svg className="w-14 h-14 text-[#B4B4B4]" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
-                          <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd"></path>
-                        </svg>
-                      </div>
-                    )}
+                {/* Only show top image for non-entity nodes */}
+                {displayNode && !isEntityNode && (
+                  <div className="mb-4 p-2 bg-[#09090B] rounded shadow-sm flex justify-center w-full border border-[#707070] flex-shrink-0">
+                    <div className="w-20 h-20 bg-gray-800 overflow-hidden flex items-center justify-center">
+                      {displayNode?.IMG_SRC ? (
+                        <img
+                          src={displayNode.IMG_SRC}
+                          alt={displayNode.name}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full bg-gray-800 flex items-center justify-center">
+                          <svg className="w-14 h-14 text-[#B4B4B4]" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg">
+                            <path fillRule="evenodd" d="M10 9a3 3 0 100-6 3 3 0 000 6zm-7 9a7 7 0 1114 0H3z" clipRule="evenodd"></path>
+                          </svg>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
+                )}
                   
-                  {/* Node Details */}
-                  {displayNode && filteredNodeProperties.length > 0 && (
+                  {/* Scrollable Content Container for Node Properties Tab */}
+                  {activeTab === 'node-properties' && (
+                    <div className="flex-1 overflow-y-auto pr-2 min-h-0">
+                  {/* Wikidata Information Section (for Entity Nodes) - Desktop */}
+                  {displayNode && isEntityNode && wikidataInfo && (
+                    <div className="w-full flex-shrink-0 mb-4 py-2 pr-2 bg-[#09090B] rounded-md border border-[#707070]">
+                      <div className="flex flex-row">
+                        {/* Left Line */}
+                        <div className="w-1 rounded-full bg-[#358EE2] flex-shrink-0 mx-2" style={{ minHeight: '100%' }}></div>
+                        
+                        {/* Content */}
+                        <div className="flex-1 flex flex-col">
+                          {/* Entity Name */}
+                          <h2 className="text-xl font-bold text-white mb-1">
+                            {wikidataInfo.name || entityName}
+                          </h2>
+                      
+                      {/* Alias and Type */}
+                      <div className="flex flex-col gap-1 mb-2">
+                        {wikidataInfo.alias && (
+                          <p className="text-sm text-[#B4B4B4]">
+                            Alias: <span className="text-white">{wikidataInfo.alias}</span>
+                          </p>
+                        )}
+                        {wikidataInfo.instance_of_label && (
+                          <p className="text-sm text-[#B4B4B4]">
+                            {wikidataInfo.sex_or_gender_label ? `${wikidataInfo.sex_or_gender_label} - ` : ''}
+                            {wikidataInfo.instance_of_label}
+                          </p>
+                        )}
+                      </div>
+                      
+                      {/* Image - Displayed after alias/type, before "Listed in" */}
+                      {displayImageUrl && (
+                        <div className="mb-3 flex justify-start">
+                          <div className="w-32 h-32 bg-gray-800 rounded-lg overflow-hidden flex items-center justify-center">
+                            {wikidataLoading ? (
+                              <div className="w-full h-full bg-gray-800 flex items-center justify-center">
+                                <svg className="animate-spin w-8 h-8 text-[#B4B4B4]" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                              </div>
+                            ) : (
+                              <img
+                                src={displayImageUrl}
+                                alt={wikidataInfo.name || entityName}
+                                className="w-full h-full object-cover"
+                                onError={(e) => {
+                                  console.error('Image failed to load in RightSidebar:', displayImageUrl);
+                                  e.target.style.display = 'none';
+                                }}
+                              />
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Listed In / Category */}
+                      {wikidataInfo.instance_of_label && (
+                        <div className="mb-2">
+                          <p className="text-xs text-[#7D7D7D] mb-1">Listed in:</p>
+                          <div className="inline-block px-1 bg-[#1A1A1A] rounded-[4px]">
+                            <div className="text-[12px] text-white p-0.5">{wikidataInfo.instance_of_label}</div>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Description */}
+                      {wikidataInfo.description && (
+                        <p className="text-sm text-[#F4F4F5] leading-relaxed mb-3">
+                          {wikidataInfo.description}
+                        </p>
+                      )}
+                      
+                      {/* Key-Value Pairs */}
+                      <div className="flex flex-col space-y-2">
+                        {wikidataInfo.country_label && (
+                          <div className="grid grid-cols-[1fr_2fr] gap-2 items-start">
+                            <span className="text-xs text-[#7D7D7D]">Country Label:</span>
+                            <span className="text-sm text-[#F4F4F5]">{wikidataInfo.country_label}</span>
+                          </div>
+                        )}
+                        {wikidataInfo.headquarters_label && (
+                          <div className="grid grid-cols-[1fr_2fr] gap-2 items-start">
+                            <span className="text-xs text-[#7D7D7D]">Headquarters Label:</span>
+                            <span className="text-sm text-[#F4F4F5]">{wikidataInfo.headquarters_label}</span>
+                          </div>
+                        )}
+                        {wikidataInfo.place_of_birth_label && (
+                          <div className="grid grid-cols-[1fr_2fr] gap-2 items-start">
+                            <span className="text-xs text-[#7D7D7D]">Place of Birth:</span>
+                            <span className="text-sm text-[#F4F4F5]">{wikidataInfo.place_of_birth_label}</span>
+                          </div>
+                        )}
+                        {wikidataInfo.founded_by_label && (
+                          <div className="grid grid-cols-[1fr_2fr] gap-2 items-start">
+                            <span className="text-xs text-[#7D7D7D]">Founded By:</span>
+                            <span className="text-sm text-[#F4F4F5]">{wikidataInfo.founded_by_label}</span>
+                          </div>
+                        )}
+                        {wikidataInfo.industry_label && (
+                          <div className="grid grid-cols-[1fr_2fr] gap-2 items-start">
+                            <span className="text-xs text-[#7D7D7D]">Industry:</span>
+                            <span className="text-sm text-[#F4F4F5]">{wikidataInfo.industry_label}</span>
+                          </div>
+                        )}
+                        {wikidataInfo.end_time && (
+                          <div className="grid grid-cols-[1fr_2fr] gap-2 items-start">
+                            <span className="text-xs text-[#7D7D7D]">End Time:</span>
+                            <span className="text-sm text-[#F4F4F5]">
+                              {new Date(wikidataInfo.end_time).toLocaleDateString()}
+                            </span>
+                          </div>
+                        )}
+                        {wikidataInfo.award_received_label && (
+                          <div className="grid grid-cols-[1fr_2fr] gap-2 items-start">
+                            <span className="text-xs text-[#7D7D7D]">Awards Received:</span>
+                            <span className="text-sm text-[#F4F4F5]">{wikidataInfo.award_received_label}</span>
+                          </div>
+                        )}
+                        {wikidataInfo.occupation_label && (
+                          <div className="grid grid-cols-[1fr_2fr] gap-2 items-start">
+                            <span className="text-xs text-[#7D7D7D]">Occupation:</span>
+                            <span className="text-sm text-[#F4F4F5]">{wikidataInfo.occupation_label}</span>
+                          </div>
+                        )}
+                        {wikidataInfo.position_held_label && (
+                          <div className="grid grid-cols-[1fr_2fr] gap-2 items-start">
+                            <span className="text-xs text-[#7D7D7D]">Position:</span>
+                            <span className="text-sm text-[#F4F4F5]">{wikidataInfo.position_held_label}</span>
+                          </div>
+                        )}
+                        {wikidataInfo.educated_at_label && (
+                          <div className="grid grid-cols-[1fr_2fr] gap-2 items-start">
+                            <span className="text-xs text-[#7D7D7D]">Education:</span>
+                            <span className="text-sm text-[#F4F4F5]">{wikidataInfo.educated_at_label}</span>
+                          </div>
+                        )}
+                        {wikidataInfo.date_birth && (
+                          <div className="grid grid-cols-[1fr_2fr] gap-2 items-start">
+                            <span className="text-xs text-[#7D7D7D]">Date of Birth:</span>
+                            <span className="text-sm text-[#F4F4F5]">
+                              {new Date(wikidataInfo.date_birth).toLocaleDateString()}
+                            </span>
+                          </div>
+                        )}
+                        {wikidataInfo.citizenship_label && (
+                          <div className="grid grid-cols-[1fr_2fr] gap-2 items-start">
+                            <span className="text-xs text-[#7D7D7D]">Citizenship:</span>
+                            <span className="text-sm text-[#F4F4F5]">{wikidataInfo.citizenship_label}</span>
+                          </div>
+                        )}
+                      </div>
+                      
+                      {/* URL Links Section */}
+                      {(wikidataInfo.wikipedia_url || wikidataInfo.url || wikidataInfo.qid) && (
+                        <div className="mt-3 pt-3 ">
+                          <p className="text-xs text-[#7D7D7D] mb-2">URL</p>
+                          <div className="flex flex-col gap-2">
+                            {wikidataInfo.wikipedia_url && (
+                              <a
+                                href={wikidataInfo.wikipedia_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[12px] text-[#6EA4F4] hover:underline"
+                              >
+                                Wikipedia Link
+                              </a>
+                            )}
+                            {wikidataInfo.url && (
+                              <a
+                                href={wikidataInfo.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[12px] text-[#6EA4F4] hover:underline"
+                              >
+                                Social Link
+                              </a>
+                            )}
+                            {wikidataInfo.qid && (
+                              <a
+                                href={`https://www.wikidata.org/wiki/${wikidataInfo.qid}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[12px] text-[#6EA4F4] hover:underline"
+                              >
+                                Wikidata Link
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Node Details - Only show for non-entity nodes, or for entity nodes when wikidata is not available */}
+                  {displayNode && (!isEntityNode || (isEntityNode && !wikidataInfo)) && filteredNodeProperties.length > 0 && (
                     <div className="w-full flex-shrink-0 mb-4">
                       <div className="flex flex-col space-y-3">
                         {filteredNodeProperties.map(([key, value], index) => {
@@ -722,6 +1253,8 @@ const RightSidebar = ({
             </div>
           )}
 
+                    </div>
+                  )}
         </div>
           </>
         )}
@@ -732,7 +1265,7 @@ const RightSidebar = ({
             <div className="w-full flex-shrink-0 min-h-[300px] max-h-[300px]">
               <GlobalActivity graphData={graphData} currentSubstory={currentSubstory} selectedSection={selectedSection} />
             </div>
-            <div className="w-full flex-shrink-0 mt-0 mb-1">
+            <div className="w-full flex-shrink-0 mt-0 mb-1 aspect-square min-h-full">
               <ConnectedData 
                 onSectionClick={onSectionClick} 
                 graphData={graphData} 
