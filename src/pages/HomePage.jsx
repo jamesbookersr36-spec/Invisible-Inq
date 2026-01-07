@@ -1392,7 +1392,7 @@ const HomePage = () => {
           </div>
 
           {}
-          <div className="hidden mr-8 lg:flex">
+          <div className="hidden mr-4 lg:flex">
             <span className="text-white text-sm">Graph Viewer 1.0</span>
           </div>
         </header>

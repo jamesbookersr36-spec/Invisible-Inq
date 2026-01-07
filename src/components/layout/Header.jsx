@@ -77,14 +77,14 @@ const Header = ({
 
         {}
         {showStoryDropdown && (
-          <div className="hidden lg:flex items-center w-80 h-full justify-end ml-auto">
+          <div className="hidden lg:flex items-center w-80 h-full justify-end ml-auto mr-4">
             <span className="text-white text-sm">Graph Viewer 1.0</span>
           </div>
         )}
 
         {}
         {!showStoryDropdown && (
-          <div className="hidden lg:flex items-center pr-4 ml-auto">
+          <div className="hidden lg:flex items-center pr-4 ml-auto mr-4">
             <span className="text-white text-sm">Graph Viewer 1.0</span>
           </div>
         )}
