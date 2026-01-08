@@ -436,8 +436,7 @@ const LeftSidebar = ({
             onSelect={(chapterId) => {
               if (onChapterSelect) {
                 onChapterSelect(chapterId);
-
-                if (onSubstorySelect) onSubstorySelect(null);
+                // Don't clear section here - let handleChapterSelect handle selecting the first section
               }
             }}
             placeholder="Select a Chapter"

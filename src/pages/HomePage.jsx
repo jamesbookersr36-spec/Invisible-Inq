@@ -176,11 +176,28 @@ const HomePage = () => {
     const newPath = newSearch ? `/?${newSearch}` : '/';
     const currentPath = location.pathname + location.search;
     
+    // Normalize paths for comparison (remove leading slash from search if present)
+    const normalizePath = (path) => {
+      if (path === '/') return '/';
+      // Ensure format is consistent: /?params or ?params
+      if (path.startsWith('/?')) return path;
+      if (path.startsWith('?')) return `/${path}`;
+      return path;
+    };
+    
+    const normalizedNewPath = normalizePath(newPath);
+    const normalizedCurrentPath = normalizePath(currentPath);
+    
     // Only navigate if path actually changed
-    if (newPath !== currentPath) {
-      // Mark this URL as one we set ourselves
-      lastURLWeSet.current = newPath;
+    if (normalizedNewPath !== normalizedCurrentPath) {
+      // Mark this URL as one we set ourselves (store the path we're navigating to, normalized for comparison)
+      // This prevents the URL sync useEffect from re-processing our own URL change
+      lastURLWeSet.current = normalizedNewPath;
       navigate(newPath, { replace: false });
+    } else {
+      // Even if path didn't change, mark it as set by us to prevent re-processing
+      // Store normalized version for consistent comparison
+      lastURLWeSet.current = normalizedNewPath;
     }
   }, [navigate, location.search, location.pathname, normalizeTitleForURL]);
 
@@ -189,36 +206,79 @@ const HomePage = () => {
     // Mark that we're updating from user action, not URL
     isReadingFromURL.current = false;
     
-    // Update state
-    selectStory(storyId);
-    
-    // Update URL immediately (clear chapter and substory)
+    // Update URL IMMEDIATELY first (before state changes)
+    // This ensures URL reflects the clicked option right away
     updateURLWithSelections(storyId, null, null);
+    
+    // Then update state
+    selectStory(storyId);
   }, [selectStory, updateURLWithSelections]);
 
   const handleChapterSelect = useCallback((chapterId) => {
     // Mark that we're updating from user action, not URL
     isReadingFromURL.current = false;
     
-    // Find the chapter title from the current story
+    // Handle null case (clearing selection) - just update state, URL already updated by parent
+    if (!chapterId) {
+      selectChapter(null);
+      return;
+    }
+    
+    // Find the chapter from the current story BEFORE state updates
     let chapterTitle = null;
+    let selectedChapter = null;
     if (currentStory && currentStory.chapters) {
-      const chapter = currentStory.chapters.find(c => c.id === chapterId);
-      if (chapter && chapter.title) {
-        chapterTitle = chapter.title;
+      selectedChapter = currentStory.chapters.find(c => c.id === chapterId);
+      if (selectedChapter && selectedChapter.title) {
+        chapterTitle = selectedChapter.title;
       }
     }
     
-    // Update state
-    selectChapter(chapterId);
+    // If chapter title not found, we can't update URL properly - log warning and return
+    if (!chapterTitle) {
+      console.warn(`Chapter title not found for chapterId: ${chapterId}`);
+      // Still select the chapter even if title is missing
+      selectChapter(chapterId);
+      return;
+    }
     
-    // Update URL immediately with chapter title (clear substory when chapter changes)
-    updateURLWithSelections(currentStoryId, chapterTitle, null);
-  }, [selectChapter, updateURLWithSelections, currentStoryId, currentStory]);
+    // Always automatically select the first section if available
+    const firstSubstory = selectedChapter?.substories?.[0];
+    const firstSubstoryId = firstSubstory?.id || null;
+    const firstSubstoryTitle = firstSubstory?.title || null;
+    
+    // Update URL IMMEDIATELY first (before state changes)
+    // This ensures URL reflects the clicked option right away
+    // The updateURLWithSelections function sets lastURLWeSet.current BEFORE navigating
+    updateURLWithSelections(currentStoryId, chapterTitle, firstSubstoryTitle || null);
+    
+    // Use setTimeout(0) to defer state update to next event loop tick
+    // This ensures URL navigation completes and lastURLWeSet flag is set before state changes
+    // When state changes, the URL sync useEffect will see lastURLWeSet and skip processing
+    setTimeout(() => {
+      // Update state - select chapter
+      // By this point, URL is updated and lastURLWeSet flag is set
+      selectChapter(chapterId);
+    }, 0);
+    
+    // If there's a first section, select it after chapter is selected
+    if (firstSubstoryId) {
+      // Use a delay to ensure chapter state is updated first
+      setTimeout(() => {
+        selectSubstory(firstSubstoryId);
+      }, 100);
+    }
+  }, [selectChapter, selectSubstory, updateURLWithSelections, currentStoryId, currentStory]);
 
   const handleSubstorySelect = useCallback((substoryId) => {
     // Mark that we're updating from user action, not URL
     isReadingFromURL.current = false;
+    
+    // Handle null case (clearing selection) - just update state, URL already updated by parent
+    if (!substoryId) {
+      selectSubstory(null);
+      return;
+    }
     
     // Find the substory title from the current chapter
     let substoryTitle = null;
@@ -238,11 +298,18 @@ const HomePage = () => {
       }
     }
     
-    // Update state
-    selectSubstory(substoryId);
-    
-    // Update URL immediately with chapter and substory titles
+    // Update URL IMMEDIATELY first (before state changes)
+    // This ensures URL reflects the clicked option right away
+    // The updateURLWithSelections function sets lastURLWeSet.current BEFORE navigating
     updateURLWithSelections(currentStoryId, chapterTitle, substoryTitle);
+    
+    // Use setTimeout(0) to defer state update to next event loop tick
+    // This ensures URL navigation completes and lastURLWeSet flag is set before state changes
+    // When state changes, the URL sync useEffect will see lastURLWeSet and skip processing
+    setTimeout(() => {
+      // Then update state
+      selectSubstory(substoryId);
+    }, 0);
   }, [selectSubstory, updateURLWithSelections, currentStoryId, currentChapterId, currentStory, currentChapter]);
 
   // Update URL when view mode or scene container changes
@@ -687,12 +754,34 @@ const HomePage = () => {
   useEffect(() => {
     const currentPath = location.pathname + location.search;
     
-    // If this is a URL we just set ourselves, don't read from it (prevent reset loop)
-    if (lastURLWeSet.current === currentPath) {
-      // Clear the flag after a short delay to allow for future URL changes
+    // Normalize path for comparison (same logic as in updateURLWithSelections)
+    const normalizePath = (path) => {
+      if (path === '/') return '/';
+      if (path.startsWith('/?')) return path;
+      if (path.startsWith('?')) return `/${path}`;
+      return path;
+    };
+    
+    const normalizedCurrentPath = normalizePath(currentPath);
+    
+    // CRITICAL: If we're not reading from URL (user initiated the change), don't process URL changes
+    // This prevents double-selection when user clicks CHAPTER/SECTION
+    // The user's click already updated both URL and state, so we should NOT re-process
+    if (!isReadingFromURL.current && lastURLWeSet.current) {
+      // This is a URL we set ourselves from a user action - completely ignore it
+      // Clear the flag after a delay to allow for future URL changes (like back button)
       setTimeout(() => {
         lastURLWeSet.current = null;
-      }, 100);
+      }, 500);
+      return;
+    }
+    
+    // If this is the exact URL we just set ourselves, don't read from it (prevent reset loop)
+    if (lastURLWeSet.current === normalizedCurrentPath) {
+      // Clear the flag after a delay to allow for future URL changes
+      setTimeout(() => {
+        lastURLWeSet.current = null;
+      }, 500);
       return;
     }
     
@@ -757,6 +846,17 @@ const HomePage = () => {
 
     // Find chapter and substory IDs from titles
     let { foundChapterId: chapterId, foundSubstoryId: substoryId } = findIdsFromTitles();
+
+    // Additional safety check: If we're not reading from URL and we just set the URL,
+    // and the found IDs match current state, this means we're in the middle of a user-initiated selection
+    // This should already be caught above, but adding as extra safety
+    if (!isReadingFromURL.current && lastURLWeSet.current) {
+      // This is definitely our own change - ignore it completely
+      setTimeout(() => {
+        lastURLWeSet.current = null;
+      }, 500);
+      return;
+    }
 
     // Check if URL values match current state - if they do, don't update (prevent loops)
     // Compare by checking if current chapter/substory titles match URL titles
