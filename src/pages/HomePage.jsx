@@ -83,43 +83,11 @@ const HomePage = () => {
   const [connectedDataCache, setConnectedDataCache] = useState({});
   const [connectedDataLoading, setConnectedDataLoading] = useState(false);
   const [connectedDataError, setConnectedDataError] = useState(null);
-
-  // Handle cluster node selection (from RightSidebar)
-  const handleClusterNodeSelect = useCallback((value) => {
-    setSelectedClusterType(value);
-    if (value) {
-      setSelectedSceneContainer('cluster');
-    }
-  }, []);
-
-  // Handle cluster method and property selection
-  const handleClusterConfigChange = useCallback((method, property) => {
-    setClusterMethod(method);
-    setClusterProperty(property);
-    if (method || property) {
-      setSelectedSceneContainer('cluster');
-    }
-  }, []);
-
-  // State for node category and property sorting
-  const [sortNodeCategory, setSortNodeCategory] = useState('');
-  const [sortNodeProperty, setSortNodeProperty] = useState('');
-
-  // Handle sort configuration change from RightSidebar
-  const handleSortConfigChange = useCallback((sortType, nodeCategory, nodeProperty, sortOrderParam) => {
-    setSortBy(sortType);
-    setSortNodeCategory(nodeCategory);
-    setSortNodeProperty(nodeProperty);
-    if (sortOrderParam) {
-      setSortOrder(sortOrderParam);
-    }
-  }, []);
-
-  // Handle scene container changes coming from RightSidebar (map/timeline/calendar/cluster)
-  const handleSceneContainerChange = useCallback((container) => {
-    setSelectedSceneContainer(container);
-    // If switching away from map, clear mapView? keep mapView; leave as is to preserve selection
-  }, []);
+  
+  // Ref to track if we're reading from URL to prevent infinite loops
+  const isReadingFromURL = useRef(false);
+  // Ref to track the last URL we set ourselves (to prevent reading our own updates)
+  const lastURLWeSet = useRef(null);
 
   const {
     stories,
@@ -147,6 +115,222 @@ const HomePage = () => {
     executeCypherQuery
   } = useGraphData();
 
+  // Helper function to normalize title for URL (lowercase, spaces/special chars to underscores)
+  const normalizeTitleForURL = useCallback((title) => {
+    if (!title) return null;
+    return String(title)
+      .toLowerCase()
+      .trim()
+      .replace(/[^a-z0-9]+/g, '_') // Replace any non-alphanumeric chars with underscore
+      .replace(/^_+|_+$/g, ''); // Remove leading/trailing underscores
+  }, []);
+
+  // Helper function to find title by normalized URL value
+  // The normalizedValue from URL is already normalized (lowercase with underscores)
+  // We just need to decode it and compare with normalized item titles
+  const findTitleByNormalized = useCallback((normalizedValue, items) => {
+    if (!normalizedValue || !items || items.length === 0) return null;
+    // Decode URL-encoded value and ensure it's lowercase (should already be, but just in case)
+    const decoded = decodeURIComponent(normalizedValue).toLowerCase().trim();
+    return items.find(item => {
+      if (!item || !item.title) return false;
+      const itemNormalized = normalizeTitleForURL(item.title);
+      return itemNormalized === decoded;
+    });
+  }, [normalizeTitleForURL]);
+
+  // Helper function to update URL with current selections (using normalized titles for chapter/substory)
+  const updateURLWithSelections = useCallback((storyId, chapterTitle, substoryTitle) => {
+    const searchParams = new URLSearchParams();
+    
+    if (storyId) {
+      searchParams.set('story', String(storyId));
+    }
+    if (chapterTitle) {
+      // Normalize chapter title: lowercase with underscores
+      const normalized = normalizeTitleForURL(chapterTitle);
+      if (normalized) {
+        searchParams.set('chapter', normalized);
+      }
+    }
+    if (substoryTitle) {
+      // Normalize substory title: lowercase with underscores
+      const normalized = normalizeTitleForURL(substoryTitle);
+      if (normalized) {
+        searchParams.set('substory', normalized);
+      }
+    }
+    
+    // Preserve view and scene from current URL
+    const currentSearchParams = new URLSearchParams(location.search);
+    const currentView = currentSearchParams.get('view');
+    const currentScene = currentSearchParams.get('scene');
+    if (currentView && currentView !== 'Graph') {
+      searchParams.set('view', currentView);
+    }
+    if (currentScene) {
+      searchParams.set('scene', currentScene);
+    }
+    
+    const newSearch = searchParams.toString();
+    const newPath = newSearch ? `/?${newSearch}` : '/';
+    const currentPath = location.pathname + location.search;
+    
+    // Only navigate if path actually changed
+    if (newPath !== currentPath) {
+      // Mark this URL as one we set ourselves
+      lastURLWeSet.current = newPath;
+      navigate(newPath, { replace: false });
+    }
+  }, [navigate, location.search, location.pathname, normalizeTitleForURL]);
+
+  // Wrapper handlers that update both state and URL
+  const handleStorySelect = useCallback((storyId) => {
+    // Mark that we're updating from user action, not URL
+    isReadingFromURL.current = false;
+    
+    // Update state
+    selectStory(storyId);
+    
+    // Update URL immediately (clear chapter and substory)
+    updateURLWithSelections(storyId, null, null);
+  }, [selectStory, updateURLWithSelections]);
+
+  const handleChapterSelect = useCallback((chapterId) => {
+    // Mark that we're updating from user action, not URL
+    isReadingFromURL.current = false;
+    
+    // Find the chapter title from the current story
+    let chapterTitle = null;
+    if (currentStory && currentStory.chapters) {
+      const chapter = currentStory.chapters.find(c => c.id === chapterId);
+      if (chapter && chapter.title) {
+        chapterTitle = chapter.title;
+      }
+    }
+    
+    // Update state
+    selectChapter(chapterId);
+    
+    // Update URL immediately with chapter title (clear substory when chapter changes)
+    updateURLWithSelections(currentStoryId, chapterTitle, null);
+  }, [selectChapter, updateURLWithSelections, currentStoryId, currentStory]);
+
+  const handleSubstorySelect = useCallback((substoryId) => {
+    // Mark that we're updating from user action, not URL
+    isReadingFromURL.current = false;
+    
+    // Find the substory title from the current chapter
+    let substoryTitle = null;
+    if (currentChapter && currentChapter.substories) {
+      const substory = currentChapter.substories.find(s => s.id === substoryId);
+      if (substory && substory.title) {
+        substoryTitle = substory.title;
+      }
+    }
+    
+    // Find the chapter title from the current story
+    let chapterTitle = null;
+    if (currentStory && currentStory.chapters) {
+      const chapter = currentStory.chapters.find(c => c.id === currentChapterId);
+      if (chapter && chapter.title) {
+        chapterTitle = chapter.title;
+      }
+    }
+    
+    // Update state
+    selectSubstory(substoryId);
+    
+    // Update URL immediately with chapter and substory titles
+    updateURLWithSelections(currentStoryId, chapterTitle, substoryTitle);
+  }, [selectSubstory, updateURLWithSelections, currentStoryId, currentChapterId, currentStory, currentChapter]);
+
+  // Update URL when view mode or scene container changes
+  // Defined after useGraphData so it can access currentStoryId, currentChapterId, etc.
+  const updateURL = useCallback((updates) => {
+    const searchParams = new URLSearchParams(location.search);
+    
+    // Preserve existing story/chapter/substory parameters
+    const storyId = searchParams.get('story') || (currentStoryId ? String(currentStoryId) : null);
+    const chapterId = searchParams.get('chapter') || (currentChapterId ? String(currentChapterId) : null);
+    const substoryId = searchParams.get('substory') || (currentSubstoryId ? String(currentSubstoryId) : null);
+    
+    // Update with new values
+    if (updates.view !== undefined) {
+      if (updates.view && updates.view !== 'Graph') {
+        searchParams.set('view', updates.view);
+      } else {
+        searchParams.delete('view');
+      }
+    } else if (viewMode && viewMode !== 'Graph') {
+      searchParams.set('view', viewMode);
+    } else {
+      searchParams.delete('view');
+    }
+    
+    if (updates.scene !== undefined) {
+      if (updates.scene) {
+        searchParams.set('scene', updates.scene);
+      } else {
+        searchParams.delete('scene');
+      }
+    } else if (selectedSceneContainer) {
+      searchParams.set('scene', selectedSceneContainer);
+    } else {
+      searchParams.delete('scene');
+    }
+    
+    // Preserve story parameters
+    if (storyId) searchParams.set('story', storyId);
+    if (chapterId) searchParams.set('chapter', chapterId);
+    if (substoryId) searchParams.set('substory', substoryId);
+    
+    const newSearch = searchParams.toString();
+    const newPath = newSearch ? `/?${newSearch}` : '/';
+    
+    // Use replace: false to allow back button navigation
+    navigate(newPath, { replace: false });
+  }, [location.search, navigate, currentStoryId, currentChapterId, currentSubstoryId, viewMode, selectedSceneContainer]);
+
+  // Handle cluster node selection (from RightSidebar)
+  const handleClusterNodeSelect = useCallback((value) => {
+    setSelectedClusterType(value);
+    if (value) {
+      setSelectedSceneContainer('cluster');
+      updateURL({ scene: 'cluster' });
+    }
+  }, [updateURL]);
+
+  // Handle cluster method and property selection
+  const handleClusterConfigChange = useCallback((method, property) => {
+    setClusterMethod(method);
+    setClusterProperty(property);
+    if (method || property) {
+      setSelectedSceneContainer('cluster');
+      updateURL({ scene: 'cluster' });
+    }
+  }, [updateURL]);
+
+  // State for node category and property sorting
+  const [sortNodeCategory, setSortNodeCategory] = useState('');
+  const [sortNodeProperty, setSortNodeProperty] = useState('');
+
+  // Handle sort configuration change from RightSidebar
+  const handleSortConfigChange = useCallback((sortType, nodeCategory, nodeProperty, sortOrderParam) => {
+    setSortBy(sortType);
+    setSortNodeCategory(nodeCategory);
+    setSortNodeProperty(nodeProperty);
+    if (sortOrderParam) {
+      setSortOrder(sortOrderParam);
+    }
+  }, []);
+
+  // Handle scene container changes coming from RightSidebar (map/timeline/calendar/cluster)
+  const handleSceneContainerChange = useCallback((container) => {
+    setSelectedSceneContainer(container);
+    updateURL({ scene: container });
+    // If switching away from map, clear mapView? keep mapView; leave as is to preserve selection
+  }, [updateURL]);
 
   // Handle selection mode changes (must be after useGraphData to access selectNode/selectEdge)
   const handleSelectionModeChange = useCallback((newMode) => {
@@ -498,28 +682,307 @@ const HomePage = () => {
     fetchConnectedData();
   }, [currentSubstory?.section_query, currentSubstory?.id, connectedDataCache]);
 
+  // Read URL parameters on mount and when URL changes (e.g., back button)
+  // URL now uses titles for chapter and substory instead of IDs
   useEffect(() => {
+    const currentPath = location.pathname + location.search;
+    
+    // If this is a URL we just set ourselves, don't read from it (prevent reset loop)
+    if (lastURLWeSet.current === currentPath) {
+      // Clear the flag after a short delay to allow for future URL changes
+      setTimeout(() => {
+        lastURLWeSet.current = null;
+      }, 100);
+      return;
+    }
+    
     const searchParams = new URLSearchParams(location.search);
     const storyId = searchParams.get('story');
-    const chapterId = searchParams.get('chapter');
-    const substoryId = searchParams.get('substory');
+    const chapterTitle = searchParams.get('chapter');
+    const substoryTitle = searchParams.get('substory');
+    const viewParam = searchParams.get('view');
+    const sceneParam = searchParams.get('scene');
 
-    if (storyId) {
-      selectStory(storyId);
-
-      if (chapterId) {
-        setTimeout(() => {
-          selectChapter(chapterId);
-
-          if (substoryId) {
-            setTimeout(() => {
-              selectSubstory(substoryId);
-            }, 100);
+    // Helper function to find chapter and substory IDs from normalized titles
+    const findIdsFromTitles = () => {
+      let foundChapterId = null;
+      let foundSubstoryId = null;
+      
+      // Try to find chapter by normalized title (need story to be loaded first)
+      if (chapterTitle && stories.length > 0) {
+        // If we have a storyId, find it in stories
+        if (storyId) {
+          const story = stories.find(s => s.id === storyId);
+          if (story && story.chapters) {
+            // Find chapter by matching normalized title
+            const chapter = findTitleByNormalized(chapterTitle, story.chapters);
+            if (chapter) {
+              foundChapterId = chapter.id;
+            }
           }
-        }, 100);
+        } else if (currentStory && currentStory.chapters) {
+          // Fallback to current story if no storyId in URL
+          const chapter = findTitleByNormalized(chapterTitle, currentStory.chapters);
+          if (chapter) {
+            foundChapterId = chapter.id;
+          }
+        }
+      }
+      
+      // Try to find substory by normalized title (need chapter to be loaded first)
+      if (substoryTitle && stories.length > 0) {
+        if (storyId && foundChapterId) {
+          const story = stories.find(s => s.id === storyId);
+          if (story && story.chapters) {
+            const chapter = story.chapters.find(c => c.id === foundChapterId);
+            if (chapter && chapter.substories) {
+              // Find substory by matching normalized title
+              const substory = findTitleByNormalized(substoryTitle, chapter.substories);
+              if (substory) {
+                foundSubstoryId = substory.id;
+              }
+            }
+          }
+        } else if (currentChapter && currentChapter.substories) {
+          // Fallback to current chapter if available
+          const substory = findTitleByNormalized(substoryTitle, currentChapter.substories);
+          if (substory) {
+            foundSubstoryId = substory.id;
+          }
+        }
+      }
+      
+      return { foundChapterId, foundSubstoryId };
+    };
+
+    // Find chapter and substory IDs from titles
+    let { foundChapterId: chapterId, foundSubstoryId: substoryId } = findIdsFromTitles();
+
+    // Check if URL values match current state - if they do, don't update (prevent loops)
+    // Compare by checking if current chapter/substory titles match URL titles
+    // But be more lenient - if we just updated state, the titles might not match yet
+    let urlChapterMatches = true;
+    let urlSubstoryMatches = true;
+    
+    if (chapterTitle) {
+      // Compare normalized titles
+      const normalizedURLTitle = normalizeTitleForURL(decodeURIComponent(chapterTitle));
+      // Check both currentChapter title and if currentChapterId matches
+      if (currentChapter?.title) {
+        const normalizedCurrentTitle = normalizeTitleForURL(currentChapter.title);
+        urlChapterMatches = normalizedCurrentTitle === normalizedURLTitle;
+      } else if (currentChapterId) {
+        // If chapter is selected but title not loaded yet, try to find it
+        const story = stories.find(s => s.id === (storyId || currentStoryId));
+        if (story && story.chapters) {
+          const chapter = story.chapters.find(c => c.id === currentChapterId);
+          if (chapter?.title) {
+            const normalizedCurrentTitle = normalizeTitleForURL(chapter.title);
+            urlChapterMatches = normalizedCurrentTitle === normalizedURLTitle;
+          } else {
+            urlChapterMatches = true; // Can't verify, assume match
+          }
+        } else {
+          // If we can't verify, assume it matches to prevent reset
+          urlChapterMatches = true;
+        }
       }
     }
-  }, [location.search, selectStory, selectChapter, selectSubstory]);
+    
+    if (substoryTitle) {
+      // Compare normalized titles
+      const normalizedURLTitle = normalizeTitleForURL(decodeURIComponent(substoryTitle));
+      // Check both currentSubstory title and if currentSubstoryId matches
+      if (currentSubstory?.title) {
+        const normalizedCurrentTitle = normalizeTitleForURL(currentSubstory.title);
+        urlSubstoryMatches = normalizedCurrentTitle === normalizedURLTitle;
+      } else if (currentSubstoryId) {
+        // If substory is selected but title not loaded yet, try to find it
+        const story = stories.find(s => s.id === (storyId || currentStoryId));
+        if (story && story.chapters) {
+          const chapter = story.chapters.find(c => c.id === (chapterId || currentChapterId));
+          if (chapter && chapter.substories) {
+            const substory = chapter.substories.find(s => s.id === currentSubstoryId);
+            if (substory?.title) {
+              const normalizedCurrentTitle = normalizeTitleForURL(substory.title);
+              urlSubstoryMatches = normalizedCurrentTitle === normalizedURLTitle;
+            } else {
+              urlSubstoryMatches = true; // Can't verify, assume match
+            }
+          } else {
+            urlSubstoryMatches = true; // Can't verify, assume match
+          }
+        } else {
+          urlSubstoryMatches = true; // Can't verify, assume match
+        }
+      }
+    }
+    
+    const urlStoryMatches = !storyId || storyId === String(currentStoryId);
+    const urlMatchesState = urlStoryMatches && urlChapterMatches && urlSubstoryMatches;
+
+    // Only read from URL if values don't match current state (i.e., URL was changed externally like back button)
+    // OR if we need to find chapter/substory but haven't found them yet (stories might not be loaded)
+    const needsUpdate = !urlMatchesState || (chapterTitle && !chapterId && stories.length > 0) || (substoryTitle && !substoryId && stories.length > 0);
+    
+    if (needsUpdate) {
+      isReadingFromURL.current = true;
+
+      // Update view mode from URL
+      if (viewParam && ['Graph', 'Table', 'JSON'].includes(viewParam)) {
+        setViewMode(viewParam);
+      }
+
+      // Update scene container from URL
+      if (sceneParam && ['map', 'cluster', 'timeline', 'calendar'].includes(sceneParam)) {
+        setSelectedSceneContainer(sceneParam);
+      } else if (!sceneParam) {
+        setSelectedSceneContainer(null);
+      }
+
+      // Handle story/chapter/substory selection from URL
+      if (storyId) {
+        // First, select the story
+        selectStory(storyId);
+
+        // Wait for story to be selected, then find and select chapter
+        if (chapterTitle) {
+          // If we found chapterId, use it; otherwise try to find it again after story loads
+          const selectChapterFromURL = () => {
+            // Re-find chapter ID in case stories weren't loaded when we first checked
+            let retryChapterId = chapterId;
+            if (!retryChapterId && stories.length > 0 && storyId) {
+              const story = stories.find(s => s.id === storyId);
+              if (story && story.chapters) {
+                const chapter = findTitleByNormalized(chapterTitle, story.chapters);
+                if (chapter) {
+                  retryChapterId = chapter.id;
+                }
+              }
+            }
+            
+            if (retryChapterId) {
+              selectChapter(retryChapterId);
+
+              // Then find and select substory
+              if (substoryTitle) {
+                const selectSubstoryFromURL = () => {
+                  // Re-find substory ID in case chapter wasn't loaded when we first checked
+                  let retrySubstoryId = substoryId;
+                  if (!retrySubstoryId && stories.length > 0 && storyId && retryChapterId) {
+                    const story = stories.find(s => s.id === storyId);
+                    if (story && story.chapters) {
+                      const chapter = story.chapters.find(c => c.id === retryChapterId);
+                      if (chapter && chapter.substories) {
+                        const substory = findTitleByNormalized(substoryTitle, chapter.substories);
+                        if (substory) {
+                          retrySubstoryId = substory.id;
+                        }
+                      }
+                    }
+                  }
+                  
+                  if (retrySubstoryId) {
+                    selectSubstory(retrySubstoryId);
+                  }
+                  
+                  // Reset flag after all selections are done
+                  // Graph will load automatically via useGraphData hook when currentSubstoryId changes
+                  setTimeout(() => {
+                    isReadingFromURL.current = false;
+                  }, 50);
+                };
+                
+                // Wait for chapter to be selected before selecting substory
+                setTimeout(selectSubstoryFromURL, 150);
+              } else {
+                // Reset flag if no substory
+                setTimeout(() => {
+                  isReadingFromURL.current = false;
+                }, 150);
+              }
+            } else {
+              // If chapter not found and stories are loaded, try one more time after a delay
+              if (stories.length > 0) {
+                setTimeout(() => {
+                  const story = stories.find(s => s.id === storyId);
+                  if (story && story.chapters) {
+                    const chapter = findTitleByNormalized(chapterTitle, story.chapters);
+                    if (chapter) {
+                      selectChapter(chapter.id);
+                      if (substoryTitle) {
+                        setTimeout(() => {
+                          const chapterForSubstory = story.chapters.find(c => c.id === chapter.id);
+                          if (chapterForSubstory && chapterForSubstory.substories) {
+                            const substory = findTitleByNormalized(substoryTitle, chapterForSubstory.substories);
+                            if (substory) {
+                              selectSubstory(substory.id);
+                            }
+                          }
+                          isReadingFromURL.current = false;
+                        }, 150);
+                      } else {
+                        isReadingFromURL.current = false;
+                      }
+                    } else {
+                      isReadingFromURL.current = false;
+                    }
+                  } else {
+                    isReadingFromURL.current = false;
+                  }
+                }, 200);
+              } else {
+                // Reset flag if chapter not found and stories not loaded
+                setTimeout(() => {
+                  isReadingFromURL.current = false;
+                }, 150);
+              }
+            }
+          };
+          
+          // Wait for story to be selected first
+          setTimeout(selectChapterFromURL, 100);
+        } else {
+          // Reset flag if no chapter
+          setTimeout(() => {
+            isReadingFromURL.current = false;
+          }, 50);
+        }
+      } else {
+        // Reset flag if no story
+        isReadingFromURL.current = false;
+      }
+    } else {
+      // URL matches state, just update view/scene if needed
+      if (viewParam && ['Graph', 'Table', 'JSON'].includes(viewParam) && viewParam !== viewMode) {
+        setViewMode(viewParam);
+      }
+      if (sceneParam && ['map', 'cluster', 'timeline', 'calendar'].includes(sceneParam) && sceneParam !== selectedSceneContainer) {
+        setSelectedSceneContainer(sceneParam);
+      } else if (!sceneParam && selectedSceneContainer) {
+        setSelectedSceneContainer(null);
+      }
+    }
+  }, [location.search, selectStory, selectChapter, selectSubstory, currentStoryId, currentChapterId, currentSubstoryId, currentStory, currentChapter, currentSubstory, stories, viewMode, selectedSceneContainer, findTitleByNormalized, normalizeTitleForURL]);
+
+  // Note: URL updates are now handled directly in the handlers (handleStorySelect, handleChapterSelect, handleSubstorySelect)
+  // This useEffect is removed to prevent conflicts and race conditions
+
+  // Update URL when viewMode changes (only if not reading from URL)
+  useEffect(() => {
+    // Only update URL if we have a story selected and we're not reading from URL
+    if (!isReadingFromURL.current && (currentStoryId || currentSubstoryId)) {
+      updateURL({ view: viewMode });
+    }
+  }, [viewMode, currentStoryId, currentSubstoryId, updateURL]);
+
+  // Update URL when selectedSceneContainer changes (only if not reading from URL)
+  useEffect(() => {
+    // Only update URL if we have a story selected and we're not reading from URL
+    if (!isReadingFromURL.current && (currentStoryId || currentSubstoryId)) {
+      updateURL({ scene: selectedSceneContainer });
+    }
+  }, [selectedSceneContainer, currentStoryId, currentSubstoryId, updateURL]);
 
   useEffect(() => {
     const hasGraphData = graphData && graphData.nodes && Array.isArray(graphData.nodes) && graphData.nodes.length > 0;
@@ -1521,9 +1984,9 @@ const HomePage = () => {
       currentStoryId={currentStoryId}
       currentChapterId={currentChapterId}
       currentSubstoryId={currentSubstoryId}
-      onStorySelect={selectStory}
-      onChapterSelect={selectChapter}
-      onSubstorySelect={selectSubstory}
+      onStorySelect={handleStorySelect}
+      onChapterSelect={handleChapterSelect}
+      onSubstorySelect={handleSubstorySelect}
       onPrevious={goToPreviousSubstory}
       onNext={goToNextSubstory}
       selectedNode={selectedNode}
@@ -2092,6 +2555,7 @@ const HomePage = () => {
                     onClick={() => {
                       setViewMode('Graph');
                       setSelectedSceneContainer(null);
+                      updateURL({ view: 'Graph', scene: null });
                       // Clear all selections when graph is redrawn
                       setSelectedNodes(new Set());
                       setSelectedEdges(new Set());
@@ -2128,6 +2592,7 @@ const HomePage = () => {
                     onClick={() => {
                       setViewMode('Table');
                       setSelectedSceneContainer(null);
+                      updateURL({ view: 'Table', scene: null });
                       // Clear all selections when switching views
                       setSelectedNodes(new Set());
                       setSelectedEdges(new Set());
@@ -2147,6 +2612,7 @@ const HomePage = () => {
                     onClick={() => {
                       setViewMode('JSON');
                       setSelectedSceneContainer(null);
+                      updateURL({ view: 'JSON', scene: null });
                       // Clear all selections when switching views
                       setSelectedNodes(new Set());
                       setSelectedEdges(new Set());

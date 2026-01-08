@@ -128,16 +128,13 @@ const useGraphData = (apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://
       const chapter = story.chapters.find(c => c.id === currentChapterId);
       if (chapter) {
         setCurrentChapter(chapter);
-
-        if (!currentSubstoryId && chapter.substories && chapter.substories.length > 0) {
-          const firstSubstory = chapter.substories[0];
-          setCurrentSubstoryId(firstSubstory.id);
-        }
+        // DON'T auto-select first substory - let user explicitly select it
+        // This prevents overriding user selections
       } else {
         setCurrentChapter(null);
       }
     }
-  }, [currentStoryId, currentChapterId, stories, currentSubstoryId]);
+  }, [currentStoryId, currentChapterId, stories]);
 
   useEffect(() => {
     let isMounted = true;
