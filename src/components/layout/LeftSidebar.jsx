@@ -414,12 +414,13 @@ const LeftSidebar = ({
               ...story
             }))}
             selectedValue={currentStoryId}
-            onSelect={(storyId) => {
+            onSelect={(storyId, option) => {
               if (onStorySelect) {
-                onStorySelect(storyId);
+                // Pass both storyId and option object (which contains title and full story data)
+                onStorySelect(storyId, option);
 
-                if (onChapterSelect) onChapterSelect(null);
-                if (onSubstorySelect) onSubstorySelect(null);
+                if (onChapterSelect) onChapterSelect(null, null);
+                if (onSubstorySelect) onSubstorySelect(null, null);
               }
             }}
             placeholder="Select a Story"
@@ -433,9 +434,10 @@ const LeftSidebar = ({
             label="Chapter"
             options={availableChapters}
             selectedValue={currentChapterId}
-            onSelect={(chapterId) => {
+            onSelect={(chapterId, option) => {
               if (onChapterSelect) {
-                onChapterSelect(chapterId);
+                // Pass both chapterId and option object (which contains title and full chapter data)
+                onChapterSelect(chapterId, option);
                 // Don't clear section here - let handleChapterSelect handle selecting the first section
               }
             }}
@@ -450,9 +452,10 @@ const LeftSidebar = ({
             label="Section"
             options={availableSections}
             selectedValue={currentSubstoryId}
-            onSelect={(substoryId) => {
+            onSelect={(substoryId, option) => {
               if (onSubstorySelect) {
-                onSubstorySelect(substoryId);
+                // Pass both substoryId and option object (which contains title and full substory data)
+                onSubstorySelect(substoryId, option);
               }
             }}
             placeholder="Select a Section"

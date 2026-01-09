@@ -139,12 +139,35 @@ const HomePage = () => {
     });
   }, [normalizeTitleForURL]);
 
-  // Helper function to update URL with current selections (using normalized titles for chapter/substory)
-  const updateURLWithSelections = useCallback((storyId, chapterTitle, substoryTitle) => {
+  // Helper function to update URL with current selections (using normalized titles for all: story/chapter/substory)
+  // storyTitle, chapterTitle, substoryTitle can be passed directly (from option objects) or will be found from IDs
+  const updateURLWithSelections = useCallback((storyId, chapterTitle, substoryTitle, storyTitleDirect = null) => {
+    // Get current URL params using window.location to avoid stale closure issues
+    const currentSearchParams = new URLSearchParams(window.location.search);
     const searchParams = new URLSearchParams();
     
+    // Use storyTitleDirect if provided (from option object), otherwise find story title from storyId
     if (storyId) {
-      searchParams.set('story', String(storyId));
+      let storyTitle = storyTitleDirect || null;
+      // If not provided directly, try to find story title from stories array
+      if (!storyTitle && stories.length > 0) {
+        const story = stories.find(s => s.id === storyId);
+        if (story && story.title) {
+          storyTitle = story.title;
+        }
+      }
+      
+      if (storyTitle) {
+        // Normalize story title: lowercase with underscores (same format as chapter/substory)
+        const normalized = normalizeTitleForURL(storyTitle);
+        if (normalized) {
+          searchParams.set('story', normalized);
+        }
+      } else {
+        // Fallback: if story title not found, use storyId (but this shouldn't happen normally)
+        console.warn(`Story title not found for storyId: ${storyId}, using ID as fallback`);
+        searchParams.set('story', String(storyId));
+      }
     }
     if (chapterTitle) {
       // Normalize chapter title: lowercase with underscores
@@ -162,7 +185,6 @@ const HomePage = () => {
     }
     
     // Preserve view and scene from current URL
-    const currentSearchParams = new URLSearchParams(location.search);
     const currentView = currentSearchParams.get('view');
     const currentScene = currentSearchParams.get('scene');
     if (currentView && currentView !== 'Graph') {
@@ -174,12 +196,21 @@ const HomePage = () => {
     
     const newSearch = searchParams.toString();
     const newPath = newSearch ? `/?${newSearch}` : '/';
-    const currentPath = location.pathname + location.search;
+    const currentPath = window.location.pathname + window.location.search;
     
-    // Normalize paths for comparison (remove leading slash from search if present)
+    console.log('[updateURLWithSelections] URL update:', {
+      storyId,
+      chapterTitle,
+      substoryTitle,
+      storyTitleDirect,
+      newSearch,
+      newPath,
+      currentPath
+    });
+    
+    // Normalize paths for comparison
     const normalizePath = (path) => {
       if (path === '/') return '/';
-      // Ensure format is consistent: /?params or ?params
       if (path.startsWith('/?')) return path;
       if (path.startsWith('?')) return `/${path}`;
       return path;
@@ -188,58 +219,118 @@ const HomePage = () => {
     const normalizedNewPath = normalizePath(newPath);
     const normalizedCurrentPath = normalizePath(currentPath);
     
-    // Only navigate if path actually changed
+    // Mark this URL as one we set ourselves BEFORE navigating
+    // This prevents the URL sync useEffect from re-processing our own URL change
+    lastURLWeSet.current = normalizedNewPath;
+    
+    // Always navigate to update the URL
     if (normalizedNewPath !== normalizedCurrentPath) {
-      // Mark this URL as one we set ourselves (store the path we're navigating to, normalized for comparison)
-      // This prevents the URL sync useEffect from re-processing our own URL change
-      lastURLWeSet.current = normalizedNewPath;
-      navigate(newPath, { replace: false });
+      console.log('[updateURLWithSelections] Navigating from:', normalizedCurrentPath, 'to:', normalizedNewPath);
+      navigate(newPath, { replace: true });
+      console.log('[updateURLWithSelections] ✓ Navigation called');
     } else {
-      // Even if path didn't change, mark it as set by us to prevent re-processing
-      // Store normalized version for consistent comparison
-      lastURLWeSet.current = normalizedNewPath;
+      console.log('[updateURLWithSelections] URL unchanged, skipping navigation');
     }
-  }, [navigate, location.search, location.pathname, normalizeTitleForURL]);
+  }, [navigate, normalizeTitleForURL, stories]);
 
   // Wrapper handlers that update both state and URL
-  const handleStorySelect = useCallback((storyId) => {
+  const handleStorySelect = useCallback((storyId, option) => {
+    if (!storyId) {
+      console.log('[handleStorySelect] Null storyId, skipping');
+      return;
+    }
+    
+    console.log('[handleStorySelect] CALLED - storyId:', storyId, 'option:', option);
     // Mark that we're updating from user action, not URL
     isReadingFromURL.current = false;
     
-    // Update URL IMMEDIATELY first (before state changes)
-    // This ensures URL reflects the clicked option right away
-    updateURLWithSelections(storyId, null, null);
+    // Get story title from option object - use label (displayed text) first, then title
+    let storyTitle = option?.label || option?.title || null;
+    if (!storyTitle && stories.length > 0) {
+      const story = stories.find(s => s.id === storyId);
+      storyTitle = story?.title || null;
+    }
+    console.log('[handleStorySelect] Story title found:', storyTitle);
     
-    // Then update state
+    // Update URL IMMEDIATELY with the story title (normalized)
+    if (storyTitle) {
+      console.log('[handleStorySelect] Updating URL with story:', storyTitle);
+      updateURLWithSelections(storyId, null, null, storyTitle);
+    } else {
+      console.warn('[handleStorySelect] No story title found, updating URL with ID only');
+      updateURLWithSelections(storyId, null, null);
+    }
+    
+    // Update state after URL update
     selectStory(storyId);
-  }, [selectStory, updateURLWithSelections]);
+  }, [selectStory, updateURLWithSelections, stories]);
 
-  const handleChapterSelect = useCallback((chapterId) => {
+  const handleChapterSelect = useCallback((chapterId, option) => {
     // Mark that we're updating from user action, not URL
     isReadingFromURL.current = false;
     
-    // Handle null case (clearing selection) - just update state, URL already updated by parent
+    // Handle null case (clearing selection)
     if (!chapterId) {
+      console.log('[handleChapterSelect] Null chapterId, clearing selection');
+      // Update URL to remove chapter and substory
+      const currentStoryId = currentStory?.id || null;
+      if (currentStoryId) {
+        const storyTitle = currentStory?.title || null;
+        if (storyTitle) {
+          updateURLWithSelections(currentStoryId, null, null, storyTitle);
+        } else {
+          updateURLWithSelections(currentStoryId, null, null);
+        }
+      }
       selectChapter(null);
       return;
     }
     
-    // Find the chapter from the current story BEFORE state updates
-    let chapterTitle = null;
-    let selectedChapter = null;
-    if (currentStory && currentStory.chapters) {
+    console.log('[handleChapterSelect] Called with:', { chapterId, option });
+    
+    // Get chapter title from option object - use label (displayed text) first, then title
+    let chapterTitle = option?.label || option?.title || null;
+    let selectedChapter = option || null;
+    console.log('[handleChapterSelect] Chapter title from option:', chapterTitle);
+    
+    // If not in option, find the chapter from the stories array (try currentStory first, then search all stories)
+    if (!chapterTitle && currentStory && currentStory.chapters) {
       selectedChapter = currentStory.chapters.find(c => c.id === chapterId);
       if (selectedChapter && selectedChapter.title) {
         chapterTitle = selectedChapter.title;
       }
     }
     
-    // If chapter title not found, we can't update URL properly - log warning and return
+    // If still not found, search all stories
+    if (!chapterTitle && stories.length > 0) {
+      for (const story of stories) {
+        if (story && story.chapters) {
+          const chapter = story.chapters.find(c => c.id === chapterId);
+          if (chapter && chapter.title) {
+            selectedChapter = chapter;
+            chapterTitle = chapter.title;
+            break;
+          }
+        }
+      }
+    }
+    
+    // If chapter title still not found, we can't update URL properly - log warning and still select
     if (!chapterTitle) {
-      console.warn(`Chapter title not found for chapterId: ${chapterId}`);
-      // Still select the chapter even if title is missing
+      console.warn(`Chapter title not found for chapterId: ${chapterId}, currentStoryId: ${currentStoryId}, stories count: ${stories.length}`);
+      // Still select the chapter even if title is missing, but don't update URL
       selectChapter(chapterId);
       return;
+    }
+    
+    // Ensure we have a storyId to include in URL
+    // If currentStoryId is not set, try to find it from the chapter we just found
+    let storyIdForURL = currentStoryId;
+    if (!storyIdForURL) {
+      const foundStory = stories.find(s => 
+        s.chapters && s.chapters.some(c => c.id === chapterId)
+      );
+      storyIdForURL = foundStory?.id || null;
     }
     
     // Always automatically select the first section if available
@@ -247,69 +338,138 @@ const HomePage = () => {
     const firstSubstoryId = firstSubstory?.id || null;
     const firstSubstoryTitle = firstSubstory?.title || null;
     
-    // Update URL IMMEDIATELY first (before state changes)
-    // This ensures URL reflects the clicked option right away
-    // The updateURLWithSelections function sets lastURLWeSet.current BEFORE navigating
-    updateURLWithSelections(currentStoryId, chapterTitle, firstSubstoryTitle || null);
+    // Ensure we have a storyId to include in URL
+    const finalStoryId = storyIdForURL || currentStoryId;
     
-    // Use setTimeout(0) to defer state update to next event loop tick
-    // This ensures URL navigation completes and lastURLWeSet flag is set before state changes
-    // When state changes, the URL sync useEffect will see lastURLWeSet and skip processing
-    setTimeout(() => {
-      // Update state - select chapter
-      // By this point, URL is updated and lastURLWeSet flag is set
+    if (!chapterTitle) {
+      console.warn(`[handleChapterSelect] Chapter title not found for chapterId: ${chapterId}`);
       selectChapter(chapterId);
-    }, 0);
+      return;
+    }
     
-    // If there's a first section, select it after chapter is selected
+    if (!finalStoryId) {
+      console.warn(`[handleChapterSelect] Story ID not found for chapterId: ${chapterId}`);
+      selectChapter(chapterId);
+      return;
+    }
+    
+    // Find story title for URL
+    const storyTitle = stories.find(s => s.id === finalStoryId)?.title || null;
+    
+    // Update URL IMMEDIATELY with chapter and first substory
+    console.log('[handleChapterSelect] Updating URL with:', { 
+      storyId: finalStoryId, 
+      storyTitle,
+      chapterTitle, 
+      firstSubstoryTitle 
+    });
+    updateURLWithSelections(finalStoryId, chapterTitle, firstSubstoryTitle || null, storyTitle || null);
+    
+    // Update state
+    selectChapter(chapterId);
+    
+    // If there's a first section, select it after a brief delay
     if (firstSubstoryId) {
-      // Use a delay to ensure chapter state is updated first
       setTimeout(() => {
         selectSubstory(firstSubstoryId);
-      }, 100);
+      }, 50);
     }
-  }, [selectChapter, selectSubstory, updateURLWithSelections, currentStoryId, currentStory]);
+  }, [selectChapter, selectSubstory, updateURLWithSelections, currentStoryId, currentStory, stories]);
 
-  const handleSubstorySelect = useCallback((substoryId) => {
+  const handleSubstorySelect = useCallback((substoryId, option) => {
     // Mark that we're updating from user action, not URL
     isReadingFromURL.current = false;
     
-    // Handle null case (clearing selection) - just update state, URL already updated by parent
+    // Handle null case (clearing selection)
     if (!substoryId) {
+      console.log('[handleSubstorySelect] Null substoryId, clearing selection');
+      // Update URL to remove substory but keep story and chapter
+      if (currentStoryId && currentChapterId) {
+        const storyTitle = currentStory?.title || null;
+        const chapterTitle = currentChapter?.title || null;
+        if (storyTitle && chapterTitle) {
+          updateURLWithSelections(currentStoryId, chapterTitle, null, storyTitle);
+        } else {
+          updateURLWithSelections(currentStoryId, chapterTitle, null);
+        }
+      }
       selectSubstory(null);
       return;
     }
     
-    // Find the substory title from the current chapter
-    let substoryTitle = null;
-    if (currentChapter && currentChapter.substories) {
-      const substory = currentChapter.substories.find(s => s.id === substoryId);
-      if (substory && substory.title) {
-        substoryTitle = substory.title;
+    console.log('[handleSubstorySelect] Called with:', { substoryId, option });
+    
+    // Get substory title from option object - use label (displayed text) first, then title
+    let substoryTitle = option?.label || option?.title || null;
+    let selectedSubstory = option || null;
+    console.log('[handleSubstorySelect] Substory title from option:', substoryTitle);
+    
+    // If not in option, find the substory title (try currentChapter first, then search all stories)
+    if (!substoryTitle && currentChapter && currentChapter.substories) {
+      selectedSubstory = currentChapter.substories.find(s => s.id === substoryId);
+      if (selectedSubstory && selectedSubstory.title) {
+        substoryTitle = selectedSubstory.title;
       }
     }
     
-    // Find the chapter title from the current story
+    // If still not found, search all stories
+    if (!substoryTitle && stories.length > 0 && currentStoryId && currentChapterId) {
+      const story = stories.find(s => s.id === currentStoryId);
+      if (story && story.chapters) {
+        const chapter = story.chapters.find(c => c.id === currentChapterId);
+        if (chapter && chapter.substories) {
+          const substory = chapter.substories.find(s => s.id === substoryId);
+          if (substory && substory.title) {
+            selectedSubstory = substory;
+            substoryTitle = substory.title;
+          }
+        }
+      }
+    }
+    
+    // Find the chapter title from the current story or stories array
     let chapterTitle = null;
     if (currentStory && currentStory.chapters) {
       const chapter = currentStory.chapters.find(c => c.id === currentChapterId);
       if (chapter && chapter.title) {
         chapterTitle = chapter.title;
       }
+    } else if (stories.length > 0 && currentStoryId && currentChapterId) {
+      // Fallback: search all stories
+      const story = stories.find(s => s.id === currentStoryId);
+      if (story && story.chapters) {
+        const chapter = story.chapters.find(c => c.id === currentChapterId);
+        if (chapter && chapter.title) {
+          chapterTitle = chapter.title;
+        }
+      }
     }
     
-    // Update URL IMMEDIATELY first (before state changes)
-    // This ensures URL reflects the clicked option right away
-    // The updateURLWithSelections function sets lastURLWeSet.current BEFORE navigating
-    updateURLWithSelections(currentStoryId, chapterTitle, substoryTitle);
-    
-    // Use setTimeout(0) to defer state update to next event loop tick
-    // This ensures URL navigation completes and lastURLWeSet flag is set before state changes
-    // When state changes, the URL sync useEffect will see lastURLWeSet and skip processing
-    setTimeout(() => {
-      // Then update state
+    // Ensure we have all required information
+    if (!currentStoryId || !chapterTitle) {
+      console.warn(`[handleSubstorySelect] Missing storyId (${currentStoryId}) or chapterTitle (${chapterTitle})`);
       selectSubstory(substoryId);
-    }, 0);
+      return;
+    }
+    
+    if (!substoryTitle) {
+      console.warn(`[handleSubstorySelect] Substory title not found, will update URL without substory`);
+    }
+    
+    // Get story title for URL
+    const storyTitle = currentStory?.title || stories.find(s => s.id === currentStoryId)?.title || null;
+    
+    // Update URL IMMEDIATELY with all information
+    console.log('[handleSubstorySelect] Updating URL with:', { 
+      storyId: currentStoryId,
+      storyTitle,
+      chapterTitle, 
+      substoryTitle 
+    });
+    updateURLWithSelections(currentStoryId, chapterTitle, substoryTitle || null, storyTitle || null);
+    
+    // Update state
+    selectSubstory(substoryId);
   }, [selectSubstory, updateURLWithSelections, currentStoryId, currentChapterId, currentStory, currentChapter]);
 
   // Update URL when view mode or scene container changes
@@ -786,50 +946,56 @@ const HomePage = () => {
     }
     
     const searchParams = new URLSearchParams(location.search);
-    const storyId = searchParams.get('story');
+    const storyTitleParam = searchParams.get('story'); // Now this is a normalized title, not an ID
     const chapterTitle = searchParams.get('chapter');
     const substoryTitle = searchParams.get('substory');
     const viewParam = searchParams.get('view');
     const sceneParam = searchParams.get('scene');
 
-    // Helper function to find chapter and substory IDs from normalized titles
+    // Helper function to find story, chapter, and substory IDs from normalized titles
     const findIdsFromTitles = () => {
+      let foundStoryId = null;
       let foundChapterId = null;
       let foundSubstoryId = null;
       
-      // Try to find chapter by normalized title (need story to be loaded first)
+      // Find story by normalized title (same format as chapter/substory)
+      if (storyTitleParam && stories.length > 0) {
+        const story = findTitleByNormalized(storyTitleParam, stories);
+        if (story) {
+          foundStoryId = story.id;
+        }
+      }
+      
+      // Try to find chapter by normalized title (need story to be found first)
       if (chapterTitle && stories.length > 0) {
-        // If we have a storyId, find it in stories
-        if (storyId) {
-          const story = stories.find(s => s.id === storyId);
-          if (story && story.chapters) {
-            // Find chapter by matching normalized title
-            const chapter = findTitleByNormalized(chapterTitle, story.chapters);
-            if (chapter) {
-              foundChapterId = chapter.id;
-            }
-          }
-        } else if (currentStory && currentStory.chapters) {
-          // Fallback to current story if no storyId in URL
-          const chapter = findTitleByNormalized(chapterTitle, currentStory.chapters);
+        // If we found a story, use it; otherwise try currentStory
+        const storyToUse = foundStoryId 
+          ? stories.find(s => s.id === foundStoryId)
+          : (storyTitleParam ? findTitleByNormalized(storyTitleParam, stories) : null) || currentStory;
+          
+        if (storyToUse && storyToUse.chapters) {
+          // Find chapter by matching normalized title
+          const chapter = findTitleByNormalized(chapterTitle, storyToUse.chapters);
           if (chapter) {
             foundChapterId = chapter.id;
           }
         }
       }
       
-      // Try to find substory by normalized title (need chapter to be loaded first)
+      // Try to find substory by normalized title (need chapter to be found first)
       if (substoryTitle && stories.length > 0) {
-        if (storyId && foundChapterId) {
-          const story = stories.find(s => s.id === storyId);
-          if (story && story.chapters) {
-            const chapter = story.chapters.find(c => c.id === foundChapterId);
-            if (chapter && chapter.substories) {
-              // Find substory by matching normalized title
-              const substory = findTitleByNormalized(substoryTitle, chapter.substories);
-              if (substory) {
-                foundSubstoryId = substory.id;
-              }
+        // Use foundStoryId if available, otherwise try to find story from title param
+        const storyToUse = foundStoryId 
+          ? stories.find(s => s.id === foundStoryId)
+          : (storyTitleParam ? findTitleByNormalized(storyTitleParam, stories) : null);
+          
+        if (storyToUse && foundChapterId) {
+          const chapter = storyToUse.chapters.find(c => c.id === foundChapterId);
+          if (chapter && chapter.substories) {
+            // Find substory by matching normalized title
+            const substory = findTitleByNormalized(substoryTitle, chapter.substories);
+            if (substory) {
+              foundSubstoryId = substory.id;
             }
           }
         } else if (currentChapter && currentChapter.substories) {
@@ -841,11 +1007,11 @@ const HomePage = () => {
         }
       }
       
-      return { foundChapterId, foundSubstoryId };
+      return { foundStoryId, foundChapterId, foundSubstoryId };
     };
 
-    // Find chapter and substory IDs from titles
-    let { foundChapterId: chapterId, foundSubstoryId: substoryId } = findIdsFromTitles();
+    // Find story, chapter, and substory IDs from normalized titles
+    let { foundStoryId: storyIdFromURL, foundChapterId: chapterId, foundSubstoryId: substoryId } = findIdsFromTitles();
 
     // Additional safety check: If we're not reading from URL and we just set the URL,
     // and the found IDs match current state, this means we're in the middle of a user-initiated selection
@@ -873,7 +1039,7 @@ const HomePage = () => {
         urlChapterMatches = normalizedCurrentTitle === normalizedURLTitle;
       } else if (currentChapterId) {
         // If chapter is selected but title not loaded yet, try to find it
-        const story = stories.find(s => s.id === (storyId || currentStoryId));
+        const story = stories.find(s => s.id === currentStoryId);
         if (story && story.chapters) {
           const chapter = story.chapters.find(c => c.id === currentChapterId);
           if (chapter?.title) {
@@ -898,7 +1064,7 @@ const HomePage = () => {
         urlSubstoryMatches = normalizedCurrentTitle === normalizedURLTitle;
       } else if (currentSubstoryId) {
         // If substory is selected but title not loaded yet, try to find it
-        const story = stories.find(s => s.id === (storyId || currentStoryId));
+        const story = stories.find(s => s.id === currentStoryId);
         if (story && story.chapters) {
           const chapter = story.chapters.find(c => c.id === (chapterId || currentChapterId));
           if (chapter && chapter.substories) {
@@ -918,12 +1084,33 @@ const HomePage = () => {
       }
     }
     
-    const urlStoryMatches = !storyId || storyId === String(currentStoryId);
+    // Check if story matches - compare normalized titles
+    let urlStoryMatches = true;
+    if (storyTitleParam) {
+      const normalizedURLStoryTitle = normalizeTitleForURL(decodeURIComponent(storyTitleParam));
+      if (currentStory?.title) {
+        const normalizedCurrentStoryTitle = normalizeTitleForURL(currentStory.title);
+        urlStoryMatches = normalizedCurrentStoryTitle === normalizedURLStoryTitle;
+      } else if (currentStoryId) {
+        // If story is selected but title not loaded yet, try to find it
+        const story = stories.find(s => s.id === currentStoryId);
+        if (story?.title) {
+          const normalizedCurrentStoryTitle = normalizeTitleForURL(story.title);
+          urlStoryMatches = normalizedCurrentStoryTitle === normalizedURLStoryTitle;
+        } else {
+          urlStoryMatches = true; // Can't verify, assume match
+        }
+      }
+    }
+    
     const urlMatchesState = urlStoryMatches && urlChapterMatches && urlSubstoryMatches;
 
     // Only read from URL if values don't match current state (i.e., URL was changed externally like back button)
-    // OR if we need to find chapter/substory but haven't found them yet (stories might not be loaded)
-    const needsUpdate = !urlMatchesState || (chapterTitle && !chapterId && stories.length > 0) || (substoryTitle && !substoryId && stories.length > 0);
+    // OR if we need to find story/chapter/substory but haven't found them yet (stories might not be loaded)
+    const needsUpdate = !urlMatchesState || 
+      (storyTitleParam && !storyIdFromURL && stories.length > 0) ||
+      (chapterTitle && !chapterId && stories.length > 0) || 
+      (substoryTitle && !substoryId && stories.length > 0);
     
     if (needsUpdate) {
       isReadingFromURL.current = true;
@@ -941,9 +1128,9 @@ const HomePage = () => {
       }
 
       // Handle story/chapter/substory selection from URL
-      if (storyId) {
+      if (storyIdFromURL) {
         // First, select the story
-        selectStory(storyId);
+        selectStory(storyIdFromURL);
 
         // Wait for story to be selected, then find and select chapter
         if (chapterTitle) {
@@ -951,8 +1138,8 @@ const HomePage = () => {
           const selectChapterFromURL = () => {
             // Re-find chapter ID in case stories weren't loaded when we first checked
             let retryChapterId = chapterId;
-            if (!retryChapterId && stories.length > 0 && storyId) {
-              const story = stories.find(s => s.id === storyId);
+            if (!retryChapterId && stories.length > 0 && storyIdFromURL) {
+              const story = stories.find(s => s.id === storyIdFromURL);
               if (story && story.chapters) {
                 const chapter = findTitleByNormalized(chapterTitle, story.chapters);
                 if (chapter) {
@@ -969,8 +1156,8 @@ const HomePage = () => {
                 const selectSubstoryFromURL = () => {
                   // Re-find substory ID in case chapter wasn't loaded when we first checked
                   let retrySubstoryId = substoryId;
-                  if (!retrySubstoryId && stories.length > 0 && storyId && retryChapterId) {
-                    const story = stories.find(s => s.id === storyId);
+                  if (!retrySubstoryId && stories.length > 0 && storyIdFromURL && retryChapterId) {
+                    const story = stories.find(s => s.id === storyIdFromURL);
                     if (story && story.chapters) {
                       const chapter = story.chapters.find(c => c.id === retryChapterId);
                       if (chapter && chapter.substories) {
@@ -1005,7 +1192,10 @@ const HomePage = () => {
               // If chapter not found and stories are loaded, try one more time after a delay
               if (stories.length > 0) {
                 setTimeout(() => {
-                  const story = stories.find(s => s.id === storyId);
+                  // Re-find story from normalized title in case it wasn't found initially
+                  const story = storyIdFromURL 
+                    ? stories.find(s => s.id === storyIdFromURL)
+                    : (storyTitleParam ? findTitleByNormalized(storyTitleParam, stories) : null);
                   if (story && story.chapters) {
                     const chapter = findTitleByNormalized(chapterTitle, story.chapters);
                     if (chapter) {
