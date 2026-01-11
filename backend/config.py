@@ -23,6 +23,15 @@ class Config:
     GROK_API_URL = os.getenv("GROK_API_URL", "https://api.x.ai/v1/chat/completions")
     GROK_MODEL = os.getenv("GROK_MODEL", "grok-3")
 
+    # Authentication Configuration
+    JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "change-this-secret-key-in-production-use-openssl-rand-hex-32")
+    JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
+    ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "43200"))  # 30 days default
+    
+    # Google OAuth Configuration
+    GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "")
+    GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "")
+
     @classmethod
     def validate(cls):
         if not cls.NEO4J_PASSWORD:

@@ -13,9 +13,11 @@
     "three": "0.170.0"
   },
   "dependencies": {
+    "@react-oauth/google": "^0.12.1",
     "@tailwindcss/vite": "^4.1.5",
     "d3": "7.9.0",
     "d3-force-3d": "^3.0.5",
+    "jwt-decode": "^4.0.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-force-graph": "^1.47.6",

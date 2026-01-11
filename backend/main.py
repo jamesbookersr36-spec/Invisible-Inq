@@ -9,8 +9,12 @@ import time
 import logging
 from config import Config
 from services import get_all_stories, get_graph_data, get_graph_data_by_section_and_country, search_with_ai, get_story_statistics, get_all_node_types, get_calendar_data, get_cluster_data, get_entity_wikidata, search_entity_wikidata
-from models import GraphData
+from models import GraphData, UserCreate, UserLogin, Token, UserResponse, GoogleAuthRequest, UserActivityCreate, UserActivityResponse, AdminLoginRequest
 from pydantic import BaseModel
+from auth import create_access_token, verify_google_token, get_current_user, get_current_admin_user
+from user_service import create_user, authenticate_user, get_user_by_email, create_or_update_google_user, get_user_by_id
+from activity_service import create_activity, get_activities, get_activity_statistics, get_user_activity_summary
+from datetime import timedelta, datetime
 
 # Configure logging
 logging.basicConfig(
@@ -89,9 +93,416 @@ async def root():
             "graph_data": "/api/graph/{substory_id} or /api/graph?graph_path=...",
             "calendar": "/api/calendar?section_query=...",
             "ai_search": "/api/ai/search?query=...",
+            "auth": {
+                "register": "/api/auth/register",
+                "login": "/api/auth/login",
+                "google": "/api/auth/google",
+                "me": "/api/auth/me",
+                "admin_login": "/api/auth/admin/login"
+            },
+            "admin": {
+                "dashboard": "/api/admin/dashboard",
+                "activities": "/api/admin/activities",
+                "statistics": "/api/admin/statistics"
+            },
+            "activity": "/api/activity/track",
             "health": "/health"
         }
     }
+
+# ============== Authentication Endpoints ==============
+
+@app.post("/api/auth/register", response_model=Token)
+async def register_user(user_data: UserCreate):
+    """
+    Register a new user with email and password
+    """
+    try:
+        # Check if user already exists
+        existing_user = get_user_by_email(user_data.email)
+        if existing_user:
+            raise HTTPException(
+                status_code=400,
+                detail="User with this email already exists"
+            )
+        
+        # Create new user
+        new_user = create_user(user_data, auth_provider="local")
+        
+        if not new_user:
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to create user"
+            )
+        
+        # Create access token
+        access_token = create_access_token(
+            data={
+                "sub": new_user.id,
+                "email": new_user.email,
+                "full_name": new_user.full_name,
+                "profile_picture": new_user.profile_picture,
+                "auth_provider": new_user.auth_provider
+            }
+        )
+        
+        logger.info(f"New user registered: {new_user.email}")
+        
+        return Token(
+            access_token=access_token,
+            token_type="bearer",
+            user=new_user
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Error during registration: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Registration failed: {str(e)}"
+        )
+
+@app.post("/api/auth/login", response_model=Token)
+async def login_user(user_credentials: UserLogin):
+    """
+    Login with email and password
+    """
+    try:
+        # Authenticate user
+        user = authenticate_user(user_credentials.email, user_credentials.password)
+        
+        if not user:
+            raise HTTPException(
+                status_code=401,
+                detail="Incorrect email or password"
+            )
+        
+        # Check if user is active
+        if not user.get('is_active', True):
+            raise HTTPException(
+                status_code=403,
+                detail="User account is disabled"
+            )
+        
+        # Create access token
+        access_token = create_access_token(
+            data={
+                "sub": user['id'],
+                "email": user['email'],
+                "full_name": user.get('full_name'),
+                "profile_picture": user.get('profile_picture'),
+                "auth_provider": user.get('auth_provider', 'local')
+            }
+        )
+        
+        logger.info(f"User logged in: {user['email']}")
+        
+        user_response = UserResponse(
+            id=user['id'],
+            email=user['email'],
+            full_name=user.get('full_name'),
+            profile_picture=user.get('profile_picture'),
+            is_active=user.get('is_active', True),
+            created_at=user.get('created_at'),
+            auth_provider=user.get('auth_provider', 'local')
+        )
+        
+        return Token(
+            access_token=access_token,
+            token_type="bearer",
+            user=user_response
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Error during login: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Login failed: {str(e)}"
+        )
+
+@app.post("/api/auth/google", response_model=Token)
+async def google_auth(auth_request: GoogleAuthRequest):
+    """
+    Authenticate with Google OAuth
+    """
+    try:
+        # Verify Google token
+        google_user_info = await verify_google_token(auth_request.credential)
+        
+        if not google_user_info:
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid Google authentication token"
+            )
+        
+        # Check email verification
+        if not google_user_info.get('email_verified', False):
+            raise HTTPException(
+                status_code=403,
+                detail="Google account email is not verified"
+            )
+        
+        # Create or update user
+        user = create_or_update_google_user(google_user_info)
+        
+        if not user:
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to create/update user from Google account"
+            )
+        
+        # Create access token
+        access_token = create_access_token(
+            data={
+                "sub": user.id,
+                "email": user.email,
+                "full_name": user.full_name,
+                "profile_picture": user.profile_picture,
+                "auth_provider": "google"
+            }
+        )
+        
+        logger.info(f"User authenticated with Google: {user.email}")
+        
+        return Token(
+            access_token=access_token,
+            token_type="bearer",
+            user=user
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Error during Google authentication: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Google authentication failed: {str(e)}"
+        )
+
+@app.get("/api/auth/me", response_model=UserResponse)
+async def get_current_user_info(current_user: dict = Depends(get_current_user)):
+    """
+    Get current authenticated user information
+    """
+    try:
+        # Fetch fresh user data from database
+        user = get_user_by_id(current_user['id'])
+        
+        if not user:
+            raise HTTPException(
+                status_code=404,
+                detail="User not found"
+            )
+        
+        return UserResponse(
+            id=user['id'],
+            email=user['email'],
+            full_name=user.get('full_name'),
+            profile_picture=user.get('profile_picture'),
+            is_active=user.get('is_active', True),
+            created_at=user.get('created_at'),
+            auth_provider=user.get('auth_provider', 'local')
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Error fetching user info: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch user information: {str(e)}"
+        )
+
+# ============== Admin Authentication Endpoints ==============
+
+@app.post("/api/auth/admin/login", response_model=Token)
+async def admin_login(credentials: AdminLoginRequest):
+    """
+    Admin login with additional verification
+    """
+    try:
+        # Authenticate user
+        user = authenticate_user(credentials.email, credentials.password)
+        
+        if not user:
+            raise HTTPException(
+                status_code=401,
+                detail="Incorrect email or password"
+            )
+        
+        # Check if user is admin
+        if not user.get('is_admin', False):
+            logger.warning(f"Non-admin user attempted admin login: {user['email']}")
+            raise HTTPException(
+                status_code=403,
+                detail="Admin privileges required"
+            )
+        
+        # Create access token with admin flag
+        access_token = create_access_token(
+            data={
+                "sub": user['id'],
+                "email": user['email'],
+                "full_name": user.get('full_name'),
+                "profile_picture": user.get('profile_picture'),
+                "auth_provider": user.get('auth_provider', 'local'),
+                "is_admin": True
+            }
+        )
+        
+        logger.info(f"Admin user logged in: {user['email']}")
+        
+        user_response = UserResponse(
+            id=user['id'],
+            email=user['email'],
+            full_name=user.get('full_name'),
+            profile_picture=user.get('profile_picture'),
+            is_active=user.get('is_active', True),
+            is_admin=user.get('is_admin', False),
+            created_at=user.get('created_at'),
+            auth_provider=user.get('auth_provider', 'local')
+        )
+        
+        return Token(
+            access_token=access_token,
+            token_type="bearer",
+            user=user_response
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Error during admin login: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Admin login failed: {str(e)}"
+        )
+
+# ============== Activity Tracking Endpoints ==============
+
+@app.post("/api/activity/track", response_model=UserActivityResponse)
+async def track_activity(activity: UserActivityCreate):
+    """
+    Track user activity (page views, section views, etc.)
+    Can be called by authenticated or anonymous users
+    """
+    try:
+        result = create_activity(activity)
+        
+        if not result:
+            raise HTTPException(
+                status_code=500,
+                detail="Failed to create activity record"
+            )
+        
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Error tracking activity: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Activity tracking failed: {str(e)}"
+        )
+
+# ============== Admin Dashboard Endpoints ==============
+
+@app.get("/api/admin/statistics")
+async def get_admin_statistics(
+    days: int = 7,
+    current_user: dict = Depends(get_current_admin_user)
+):
+    """
+    Get activity statistics for admin dashboard (Admin only)
+    """
+    try:
+        stats = get_activity_statistics(days=days)
+        return stats
+    except Exception as e:
+        logger.exception(f"Error fetching admin statistics: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch statistics: {str(e)}"
+        )
+
+@app.get("/api/admin/activities", response_model=List[UserActivityResponse])
+async def get_admin_activities(
+    user_id: Optional[str] = None,
+    session_id: Optional[str] = None,
+    activity_type: Optional[str] = None,
+    days: int = 7,
+    limit: int = 100,
+    skip: int = 0,
+    current_user: dict = Depends(get_current_admin_user)
+):
+    """
+    Get user activities with filters (Admin only)
+    """
+    try:
+        start_date = datetime.utcnow() - timedelta(days=days) if days else None
+        
+        activities = get_activities(
+            user_id=user_id,
+            session_id=session_id,
+            activity_type=activity_type,
+            start_date=start_date,
+            limit=limit,
+            skip=skip
+        )
+        
+        return activities
+    except Exception as e:
+        logger.exception(f"Error fetching activities: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch activities: {str(e)}"
+        )
+
+@app.get("/api/admin/users/{user_id}/activity")
+async def get_user_activity(
+    user_id: str,
+    days: int = 30,
+    current_user: dict = Depends(get_current_admin_user)
+):
+    """
+    Get activity summary for a specific user (Admin only)
+    """
+    try:
+        summary = get_user_activity_summary(user_id, days=days)
+        return summary
+    except Exception as e:
+        logger.exception(f"Error fetching user activity: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch user activity: {str(e)}"
+        )
+
+@app.get("/api/admin/dashboard")
+async def get_admin_dashboard(
+    current_user: dict = Depends(get_current_admin_user)
+):
+    """
+    Get comprehensive dashboard data for admin (Admin only)
+    """
+    try:
+        # Get statistics for last 7 days
+        stats_7d = get_activity_statistics(days=7)
+        # Get statistics for last 30 days
+        stats_30d = get_activity_statistics(days=30)
+        
+        # Get recent activities
+        recent_activities = get_activities(limit=20, skip=0)
+        
+        return {
+            "stats_7_days": stats_7d,
+            "stats_30_days": stats_30d,
+            "recent_activities": [activity.model_dump() for activity in recent_activities],
+            "admin_user": current_user
+        }
+    except Exception as e:
+        logger.exception(f"Error fetching dashboard data: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch dashboard data: {str(e)}"
+        )
 
 @app.get("/health")
 async def health_check():

@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { FiUser, FiLogOut, FiChevronDown } from 'react-icons/fi';
 import DonationPopup from '../common/DonationPopup';
 import CombinedStoryDropdown from '../story/CombinedStoryDropdown';
+import { useAuth } from '../../contexts/AuthContext';
 
 const Header = ({
   stories = [],
@@ -15,6 +17,28 @@ const Header = ({
   usePlainLogo = false
 }) => {
   const [showDonationPopup, setShowDonationPopup] = useState(false);
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const { user, logout, isAuthenticated } = useAuth();
+  const userMenuRef = useRef(null);
+
+  // Close user menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target)) {
+        setShowUserMenu(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  const handleLogout = () => {
+    logout();
+    setShowUserMenu(false);
+  };
 
   return (
     <div className="sticky top-0 z-50 flex flex-col">
@@ -75,17 +99,118 @@ const Header = ({
           </button>
         </nav>
 
-        {}
-        {showStoryDropdown && (
-          <div className="hidden lg:flex items-center w-80 h-full justify-end ml-auto mr-4">
-            <span className="text-white text-sm">Graph Viewer 1.0</span>
-          </div>
-        )}
+        {/* User Menu and Version Info - Desktop */}
+        <div className="hidden lg:flex items-center gap-4 ml-auto mr-4">
+          {isAuthenticated() ? (
+            <div className="relative" ref={userMenuRef}>
+              <button
+                onClick={() => setShowUserMenu(!showUserMenu)}
+                className="flex items-center gap-2 text-white hover:text-gray-300 transition-colors"
+              >
+                {user?.profile_picture ? (
+                  <img
+                    src={user.profile_picture}
+                    alt={user.full_name || user.email}
+                    className="w-7 h-7 rounded-full object-cover"
+                  />
+                ) : (
+                  <div className="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center">
+                    <FiUser className="w-4 h-4" />
+                  </div>
+                )}
+                <span className="text-sm hidden xl:inline">
+                  {user?.full_name || user?.email?.split('@')[0]}
+                </span>
+                <FiChevronDown className="w-4 h-4" />
+              </button>
 
-        {}
+              {showUserMenu && (
+                <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50 border border-gray-200">
+                  <div className="px-4 py-2 border-b border-gray-200">
+                    <p className="text-sm font-medium text-gray-900 truncate">
+                      {user?.full_name || 'User'}
+                    </p>
+                    <p className="text-xs text-gray-500 truncate">{user?.email}</p>
+                  </div>
+                  <button
+                    onClick={handleLogout}
+                    className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                  >
+                    <FiLogOut className="w-4 h-4" />
+                    Sign out
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-center gap-2">
+              <Link
+                to="/login"
+                className="text-white hover:text-gray-300 transition-colors text-sm"
+              >
+                Sign in
+              </Link>
+              <span className="text-white text-sm">|</span>
+              <Link
+                to="/register"
+                className="bg-indigo-600 text-white px-3 py-1 rounded-md hover:bg-indigo-700 transition-colors text-sm"
+              >
+                Sign up
+              </Link>
+            </div>
+          )}
+          
+          <span className="text-white text-sm">Graph Viewer 1.0</span>
+        </div>
+
+        {/* Mobile - Show auth and version */}
         {!showStoryDropdown && (
-          <div className="hidden lg:flex items-center pr-4 ml-auto mr-4">
-            <span className="text-white text-sm">Graph Viewer 1.0</span>
+          <div className="lg:hidden flex items-center gap-2 pr-4 ml-auto mr-4">
+            {isAuthenticated() ? (
+              <div className="relative" ref={userMenuRef}>
+                <button
+                  onClick={() => setShowUserMenu(!showUserMenu)}
+                  className="flex items-center text-white hover:text-gray-300 transition-colors"
+                >
+                  {user?.profile_picture ? (
+                    <img
+                      src={user.profile_picture}
+                      alt={user.full_name || user.email}
+                      className="w-7 h-7 rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center">
+                      <FiUser className="w-4 h-4" />
+                    </div>
+                  )}
+                </button>
+
+                {showUserMenu && (
+                  <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg py-1 z-50 border border-gray-200">
+                    <div className="px-4 py-2 border-b border-gray-200">
+                      <p className="text-sm font-medium text-gray-900 truncate">
+                        {user?.full_name || 'User'}
+                      </p>
+                      <p className="text-xs text-gray-500 truncate">{user?.email}</p>
+                    </div>
+                    <button
+                      onClick={handleLogout}
+                      className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center gap-2"
+                    >
+                      <FiLogOut className="w-4 h-4" />
+                      Sign out
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <Link
+                to="/login"
+                className="text-white hover:text-gray-300 transition-colors text-sm"
+              >
+                Sign in
+              </Link>
+            )}
           </div>
         )}
 
