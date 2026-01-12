@@ -3,7 +3,6 @@ import * as d3 from 'd3';
 import * as topojson from 'topojson-client';
 import { formatGraphData } from '../../utils/dataUtils';
 import { getNodeTypeColor } from '../../utils/colorUtils';
-import Loader from './Loader';
 
 const GraphViewByMap = ({ mapView = 'flat', graphData = { nodes: [], links: [] }, currentSubstoryId = null, currentSubstory = null }) => {
   const containerRef = useRef(null);
@@ -1143,7 +1142,7 @@ const GraphViewByMap = ({ mapView = 'flat', graphData = { nodes: [], links: [] }
       {!worldData && (
         <div className="absolute inset-0 flex items-center justify-center">
           <div className="text-center text-[#B4B4B4] flex flex-col items-center gap-4">
-            <Loader size={36} color="#707070" />
+            <Loader size={48} />
           </div>
         </div>
       )}
@@ -1167,7 +1166,7 @@ const GraphViewByMap = ({ mapView = 'flat', graphData = { nodes: [], links: [] }
       {loadingCountryData && (
         <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
           <div className="bg-[#1A1A1A] border border-[#2A2A2A] rounded-lg shadow-2xl py-4 px-6 flex flex-col items-center gap-3">
-            <Loader size={36} color="#707070" />
+            <Loader size={48} />
           </div>
         </div>
       )}

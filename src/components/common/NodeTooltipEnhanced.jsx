@@ -3,9 +3,10 @@ import {
   FaUser, FaBuilding, FaMapMarkerAlt, FaDollarSign, 
   FaHandshake, FaFlag, FaBullseye, FaCog, 
   FaFileAlt, FaGlobe, FaLink, FaLayerGroup,
-  FaPlus, FaTimes, FaShareAlt, FaSpinner,
+  FaPlus, FaTimes, FaShareAlt,
   FaBriefcase, FaGraduationCap, FaAward, FaExternalLinkAlt
 } from 'react-icons/fa';
+import Loader from './Loader';
 
 /**
  * NodeTooltipEnhanced - Comprehensive tooltip component for Three.js graph nodes
@@ -420,7 +421,7 @@ const EntityTooltipLayout = ({ node, color }) => {
         >
           {loading ? (
             <div className="w-full h-full flex items-center justify-center">
-              <FaSpinner className="animate-spin text-[#666]" size={24} />
+              <Loader size={24} />
             </div>
           ) : imageUrl && !imageError ? (
             <img 

@@ -4,7 +4,8 @@ import { useToast } from '../contexts/ToastContext';
 import ThreeGraphVisualization from '../components/graph/ThreeGraphVisualization';
 import Layout from '../components/layout/Layout';
 import { formatGraphData } from '../utils/dataUtils';
-import { FaUpload, FaLink, FaFilePdf, FaFileAlt, FaCheck, FaTimes, FaSpinner, FaChartLine, FaTag } from 'react-icons/fa';
+import { FaUpload, FaLink, FaFilePdf, FaFileAlt, FaCheck, FaTimes, FaChartLine, FaTag } from 'react-icons/fa';
+import Loader from '../components/common/Loader';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 
@@ -172,7 +173,7 @@ const SubmissionPage = () => {
       case 'completed':
         return <FaCheck className="text-green-400" />;
       case 'processing':
-        return <FaSpinner className="text-yellow-400 animate-spin" />;
+        return <div className="inline-block"><Loader size={16} color="#facc15" /></div>;
       case 'failed':
         return <FaTimes className="text-red-400" />;
       default:
@@ -336,7 +337,7 @@ const SubmissionPage = () => {
                 >
                   {submitting ? (
                     <>
-                      <FaSpinner className="inline mr-2 animate-spin" />
+                      <div className="inline-block mr-2"><Loader size={16} color="#ffffff" /></div>
                       Processing...
                     </>
                   ) : (
@@ -355,7 +356,7 @@ const SubmissionPage = () => {
               
               {loadingSubmissions ? (
                 <div className="text-center py-8">
-                  <FaSpinner className="inline animate-spin text-2xl" />
+                  <Loader size={48} />
                 </div>
               ) : submissions.length === 0 ? (
                 <div className="text-center py-8 text-gray-400">

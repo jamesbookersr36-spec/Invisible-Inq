@@ -89,7 +89,7 @@ const LoginPage = () => {
           <Link to="/" className="flex justify-center">
             <img
               className="h-12 w-auto"
-              src="/images/logo-with-text.png"
+              src="/logo/logo-with-text.png"
               alt="Logo"
               onError={(e) => {
                 e.target.style.display = 'none';

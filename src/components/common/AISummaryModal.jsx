@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { FaTimes, FaSpinner, FaExclamationTriangle, FaSearch, FaRedo } from 'react-icons/fa';
 import { getNodeTypeColor } from '../../utils/colorUtils';
+import Loader from './Loader';
 
 /**
  * AISummaryModal - Displays AI-generated summaries with embedded entity buttons
@@ -281,10 +282,7 @@ const AISummaryModal = ({
           {/* Loading State */}
           {loading && (
             <div className="flex flex-col items-center justify-center h-full gap-3 text-[#707070]">
-              <div className="relative">
-                <div className="w-12 h-12 rounded-full border-2 border-[#404040]" />
-                <div className="absolute inset-0 w-12 h-12 rounded-full border-2 border-t-[#5C9EFF] animate-spin" />
-              </div>
+              <Loader size={48} />
               <p className="text-sm text-[#B4B4B4]">Analyzing graph data...</p>
             </div>
           )}

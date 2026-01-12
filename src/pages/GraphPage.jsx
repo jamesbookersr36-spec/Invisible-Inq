@@ -6,8 +6,8 @@ import ThreeGraphVisualization from '../components/graph/ThreeGraphVisualization
 import GraphControls from '../components/graph/GraphControls';
 import DonationPopup from '../components/common/DonationPopup';
 import AISearchModal from '../components/common/AISearchModal';
-import Loader from '../components/common/Loader';
 import useGraphData from '../hooks/useGraphData';
+import Loader from '../components/common/Loader';
 import { FaProjectDiagram, FaTable, FaCode, FaSearch, FaDownload, FaCube, FaSquare, FaTimes, FaSearchPlus, FaSearchMinus, FaExpand, FaExpandArrowsAlt, FaMousePointer, FaDrawPolygon, FaVectorSquare } from 'react-icons/fa';
 
 const GraphPage = () => {
@@ -342,7 +342,7 @@ const GraphPage = () => {
             {}
             {loading && viewMode === 'Graph' && (
               <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 z-10">
-                <Loader size={36} color="#707070" />
+                <Loader size={48} />
               </div>
             )}
 
@@ -656,7 +656,7 @@ const GraphPage = () => {
     {aiSearchLoading && (
       <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[100]">
         <div className="text-white text-center flex flex-col items-center gap-4">
-          <Loader size={60} color="#707070" />
+          <Loader size={64} />
         </div>
       </div>
     )}

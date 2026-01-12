@@ -29,7 +29,7 @@ export function Layout({ children }) {
         <div className="flex items-center justify-between h-16 px-4 border-b border-[#27272A]">
           <div className="flex items-center gap-2.5">
             <img
-              src="/images/logo-with-text.png"
+              src="/logo/logo-with-text.png"
               alt="Invisible Inquiry Logo"
               className="h-7 object-contain"
               onError={(e) => {

@@ -22,9 +22,9 @@ import CalendarContainer from '../components/common/CalendarContainer';
 import ConnectedData from '../components/common/ConnectedData';
 import VirtualizedTable from '../components/common/VirtualizedTable';
 import LazyJSONViewer from '../components/common/LazyJSONViewer';
-import Loader from '../components/common/Loader';
 import ParticlesBackground from '../components/common/ParticlesBackground';
 import BackgroundOverlay from '../components/common/BackgroundOverlay';
+import Loader from '../components/common/Loader';
 import { FaProjectDiagram, FaTable, FaCode, FaSearch, FaDownload, FaCube, FaSquare, FaTimes, FaSearchPlus, FaSearchMinus, FaExpand, FaExpandArrowsAlt, FaEye, FaEyeSlash, FaPlus, FaFilter, FaSort, FaMousePointer, FaVectorSquare, FaChevronDown, FaSitemap } from 'react-icons/fa';
 import { FiUser, FiLogOut, FiChevronDown } from 'react-icons/fi';
 import { getNodeTypeColor } from '../utils/colorUtils';
@@ -2133,7 +2133,7 @@ const HomePage = () => {
           {}
           <div className="h-full flex items-center ml-8 pl-2">
             <img
-              src="/images/logo-with-text.png"
+              src="/logo/logo-with-text.png"
               alt="Invisible Injury Logo"
               className="h-8 object-contain"
             />
@@ -2303,7 +2303,7 @@ const HomePage = () => {
           {/* Logo section */}
           <div className="flex justify-center items-center px-6 sm:px-8 lg:px-12 xl:px-16 pt-8 pb-6 w-full">
             <img
-              src="/images/logo-without-text.png"
+              src="/logo/logo-without-text.png"
               alt="Invisible Inquiry Logo"
               className="h-12 sm:h-12 object-contain"
             />
@@ -2317,7 +2317,7 @@ const HomePage = () => {
           <div className="px-6 sm:px-8 lg:px-12 xl:px-24 pb-8 w-full">
             {loading ? (
               <div className="flex flex-col justify-center items-center py-12 gap-4">
-                <Loader size={36} color="#707070" />
+                <Loader size={48} />
               </div>
             ) : stories.length === 0 ? (
               <div className="flex flex-col justify-center items-center py-24 gap-6">
@@ -2474,7 +2474,7 @@ const HomePage = () => {
           {}
           {loading && viewMode === 'Graph' && (
             <div className="absolute inset-0 flex items-center justify-center z-10">
-              <Loader size={36} color="#707070" />
+              <Loader size={36} />
             </div>
           )}
 
@@ -3443,7 +3443,7 @@ const HomePage = () => {
     {aiSearchLoading && (
       <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[100]">
         <div className="text-white text-center flex flex-col items-center gap-4">
-          <Loader size={60} color="#707070" />
+          <Loader size={64} />
         </div>
       </div>
     )}

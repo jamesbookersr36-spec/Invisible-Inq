@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { apiRequest } from '../utils/api';
 import { FiFilter, FiRefreshCw } from 'react-icons/fi';
+import Loader from '../components/Loader';
 
 export function ActivitiesPage() {
   const [activities, setActivities] = useState([]);
@@ -51,7 +52,7 @@ export function ActivitiesPage() {
   if (loading && activities.length === 0) {
     return (
       <div className="flex items-center justify-center h-96">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+        <Loader size={48} />
       </div>
     );
   }

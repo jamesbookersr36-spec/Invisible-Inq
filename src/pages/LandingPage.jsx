@@ -20,7 +20,7 @@ const LandingPage = () => {
         {}
         <div className="mb-4 lg:mb-8">
           <img
-            src="/images/logo-with-text.png"
+            src="/logo/logo-with-text.png"
             alt="Invisible Injury Logo"
             className="h-8 object-contain"
           />

@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useToast } from '../../contexts/ToastContext';
-import Loader from './Loader';
 
 const ClusterContainer = ({
   selectedCluster,
@@ -150,7 +149,7 @@ const ClusterContainer = ({
   if (loading) {
     return (
       <div className="absolute inset-0 pointer-events-none flex flex-col items-center justify-center gap-3" style={{ zIndex: 5 }}>
-        <Loader size={40} color="#707070" />
+        <Loader size={48} />
       </div>
     );
   }

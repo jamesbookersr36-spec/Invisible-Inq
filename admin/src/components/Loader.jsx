@@ -1,5 +1,3 @@
-import PropTypes from 'prop-types';
-
 /**
  * Custom animated loading spinner
  * @param {number} size - Size of the loader in pixels (default: 48)
@@ -18,12 +16,6 @@ const Loader = ({ size = 48, className = '', color = '#fff' }) => {
       }}
     />
   );
-};
-
-Loader.propTypes = {
-  size: PropTypes.number,
-  className: PropTypes.string,
-  color: PropTypes.string
 };
 
 export default Loader;

@@ -31,7 +31,7 @@ export function LoginPage() {
       <div className="max-w-md w-full bg-[#18181B] border border-[#27272A] rounded-xl shadow-lg p-8">
         <div className="text-center mb-8">
           <img
-            src="/images/logo-with-text.png"
+            src="/logo/logo-with-text.png"
             alt="Invisible Inquiry Logo"
             className="h-12 mx-auto mb-4 object-contain"
             onError={(e) => {

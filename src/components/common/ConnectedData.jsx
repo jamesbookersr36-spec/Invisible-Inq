@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
-import Loader from './Loader';
 import StringConstants from '../StringConstants';
 
 // Mockup data matching the exact relationships from the image
@@ -893,7 +892,7 @@ const ConnectedData = ({
             </div>
           </div>
           <div className="w-full flex flex-col items-center justify-center gap-3 min-h-[200px]">
-            <Loader size={40} color="#707070" />
+            <Loader size={48} />
           </div>
         </div>
       </div>

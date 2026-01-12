@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { useToast } from '../../contexts/ToastContext';
-import Loader from './Loader';
 import EmptyState from './EmptyState';
 
 // Calendar "Linear" layout with dynamic timeline + free-floating items
@@ -374,7 +373,7 @@ const CalendarContainer = ({ sectionQuery = null, currentSubstory = null }) => {
   if (loading) {
     return (
       <div className="w-full h-full flex flex-col items-center justify-center gap-4">
-        <Loader size={36} color="#707070" />
+        <Loader size={48} />
       </div>
     );
   }
