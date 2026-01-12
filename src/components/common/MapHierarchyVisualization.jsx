@@ -293,7 +293,7 @@ const MapHierarchyVisualization = ({ graphData = { nodes: [], links: [] }, posit
         ref={svgRef}
         width={dimensions.width}
         height={dimensions.height}
-        style={{ display: 'block' }}
+        className="block"
       />
     </div>
   );

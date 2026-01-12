@@ -1152,14 +1152,7 @@ const GraphViewByMap = ({ mapView = 'flat', graphData = { nodes: [], links: [] }
         ref={svgRef}
         width={mapDimensions.width || 0}
         height={mapDimensions.height || 0}
-        style={{ 
-          display: 'block',
-          position: 'absolute',
-          left: '50%',
-          top: '50%',
-          transform: 'translate(-50%, -50%)',
-          zIndex: 1
-        }}
+        className="block absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[1]"
       />
       
       {/* Graph visualization in remaining space (excluding map) */}
@@ -1167,14 +1160,7 @@ const GraphViewByMap = ({ mapView = 'flat', graphData = { nodes: [], links: [] }
         ref={graphSvgRef}
         width={containerDimensions.width || 0}
         height={containerDimensions.height || 0}
-        style={{ 
-          display: 'block',
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          zIndex: 10,
-          pointerEvents: 'none' // Allow clicks to pass through to map, nodes/links will have pointer-events: auto
-        }}
+        className="block absolute top-0 left-0 z-10 pointer-events-none"
       />
       
       {/* Loading indicator */}

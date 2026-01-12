@@ -121,12 +121,11 @@ const BaseTooltipLayout = ({ node, color }) => {
       </div>
 
       {/* Right Side - Icon Group (matching Figma design) */}
-      <div className="flex flex-col items-center justify-between ml-4 flex-shrink-0 self-stretch" style={{ gap: '6px' }}>
+      <div className="flex flex-col items-center justify-between ml-4 flex-shrink-0 self-stretch gap-1.5">
         {/* Top: Chevron/Expand Icon */}
         <button 
-          className="flex items-center justify-center text-white hover:text-gray-300 transition-colors"
+          className="flex items-center justify-center text-white hover:text-gray-300 transition-colors pt-[5px]"
           title="Expand"
-          style={{ padding: '5px 0 0 0' }}
         >
           <svg width="16" height="8" viewBox="0 0 16 8" fill="none">
             <path d="M1 7L8 1L15 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
@@ -427,8 +426,7 @@ const EntityTooltipLayout = ({ node, color }) => {
             <img 
               src={imageUrl} 
               alt={entityName}
-              className="w-full h-full object-cover"
-              style={{ display: 'block' }}
+              className="w-full h-full object-cover block"
               loading="lazy"
               onLoad={() => {
                 console.log('✅ Image loaded successfully:', imageUrl);
@@ -688,12 +686,11 @@ const AmountTooltipLayout = ({ node, color, graphData }) => {
       </div>
 
       {/* Right Side - Icon Group (matching Figma design) */}
-      <div className="flex flex-col items-center justify-between ml-4 flex-shrink-0 self-stretch" style={{ gap: '6px' }}>
+      <div className="flex flex-col items-center justify-between ml-4 flex-shrink-0 self-stretch gap-1.5">
         {/* Top: Chevron/Expand Icon */}
         <button 
-          className="flex items-center justify-center text-white hover:text-gray-300 transition-colors"
+          className="flex items-center justify-center text-white hover:text-gray-300 transition-colors pt-[5px]"
           title="Expand"
-          style={{ padding: '5px 0 0 0' }}
         >
           <svg width="16" height="8" viewBox="0 0 16 8" fill="none">
             <path d="M1 7L8 1L15 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>

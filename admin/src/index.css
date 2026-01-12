@@ -1,5 +1,15 @@
 @import "tailwindcss";
 
+:root {
+  color-scheme: dark;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #09090B;
+  color: #ffffff;
+}
+
 * {
   margin: 0;
   padding: 0;
@@ -7,9 +17,13 @@
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
-    sans-serif;
+  background-color: #09090B;
+  color: #ffffff;
+  font-family: Arial, sans-serif;
+  user-select: none;
+  -webkit-user-select: none;
+  -moz-user-select: none;
+  -ms-user-select: none;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -17,4 +31,52 @@ body {
 #root {
   min-height: 100vh;
   width: 100%;
+  background-color: #09090B;
+}
+
+/* Allow text selection in form elements and editable content */
+input,
+textarea,
+[contenteditable="true"],
+[contenteditable="true"] *,
+.selectable {
+  user-select: text;
+  -webkit-user-select: text;
+  -moz-user-select: text;
+  -ms-user-select: text;
+}
+
+/* Custom scrollbar styling */
+* {
+  &::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: #333333;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: #707070;
+    border-radius: 2px;
+  }
+
+  &::-webkit-scrollbar-thumb:hover {
+    background: #909090;
+  }
+
+  scrollbar-width: thin;
+  scrollbar-color: #707070 #333333;
+}
+
+/* Dark theme for select options */
+select option {
+  background-color: #09090B;
+  color: #ffffff;
+}
+
+select {
+  background-color: #09090B;
+  color: #ffffff;
 }

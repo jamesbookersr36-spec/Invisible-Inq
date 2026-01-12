@@ -552,7 +552,7 @@ const RightSidebar = ({
                   <div className="mb-4 flex flex-col space-y-3 pb-4">
                     <div className="flex flex-row">
                       {/* Left Line */}
-                      <div className="w-0.5 bg-[#358EE2] flex-shrink-0 ml-3 mr-3" style={{ minHeight: '100%' }}></div>
+                      <div className="w-0.5 bg-[#358EE2] flex-shrink-0 ml-3 mr-3 h-full"></div>
                       
                       {/* Content */}
                       <div className="flex-1 flex flex-col">
@@ -869,7 +869,7 @@ const RightSidebar = ({
                     <div className="w-full flex-shrink-0 mb-4 py-2 pr-2 bg-[#09090B] rounded-md border border-[#707070]">
                       <div className="flex flex-row">
                         {/* Left Line */}
-                        <div className="w-1 rounded-full bg-[#358EE2] flex-shrink-0 mx-2" style={{ minHeight: '100%' }}></div>
+                        <div className="w-1 rounded-full bg-[#358EE2] flex-shrink-0 mx-2 h-full"></div>
                         
                         {/* Content */}
                         <div className="flex-1 flex flex-col">

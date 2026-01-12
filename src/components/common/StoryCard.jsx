@@ -70,46 +70,19 @@ const StoryCard = ({ story, onClick, onChapterSelect, totalNodes = 0, entityCoun
 
   return (
     <div 
-      className="flex flex-col w-full cursor-pointer group transition-all duration-300 ease-in-out hover:scale-[1.02] hover:shadow-md hover:shadow-white/10"
-      style={{
-        gap: '15px',
-        padding: '0px',
-        position: 'relative',
-        minHeight: '0',
-        border: '1px solid #d3d3d3',
-        borderRadius: '5px',
-        padding: '1px',
-        transform: 'translateY(0)',
-      }}
+      className="flex flex-col w-full cursor-pointer group transition-all duration-300 ease-in-out hover:scale-[1.02] hover:shadow-md hover:shadow-white/10 gap-[15px] p-[1px] relative min-h-0 border border-[#d3d3d3] rounded-[5px]"
       onClick={onClick}
     >
       {/* Top section with light grey background - approximately half the card height */}
       <div 
-        className="relative w-full overflow-hidden transition-all duration-300 group-hover:brightness-110"
-        style={{
-          borderRadius: '5px',
-          backgroundColor: '#D3D3D3', // Light grey
-          aspectRatio: '297 / 191',
-          position: 'relative',
-        }}
+        className="relative w-full overflow-hidden transition-all duration-300 group-hover:brightness-110 rounded-[5px] bg-[#D3D3D3] aspect-[297/191]"
       >
         {/* Hover overlay effect */}
         <div className="absolute inset-0 bg-gradient-to-br from-white/0 to-white/10 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
         
         {/* UPDATING pill badge in top-left */}
         <div
-          className="absolute top-0 left-0 z-10 transition-all duration-300 group-hover:scale-110 group-hover:shadow-lg"
-          style={{
-            backgroundColor: '#00B25F', // Yellow-gold
-            borderRadius: '9999px',
-            padding: '4px 12px',
-            margin: '8px',
-            fontSize: '11px',
-            fontWeight: '600',
-            color: '#ffffff',
-            textTransform: 'uppercase',
-            letterSpacing: '0.5px'
-          }}
+          className="absolute top-0 left-0 z-10 transition-all duration-300 group-hover:scale-110 group-hover:shadow-lg bg-[#00B25F] rounded-full px-3 py-1 m-2 text-[11px] font-semibold text-white uppercase tracking-[0.5px]"
         >
           NEW
         </div>
@@ -161,27 +134,11 @@ const StoryCard = ({ story, onClick, onChapterSelect, totalNodes = 0, entityCoun
 
       {/* Bottom section with black background - fills remaining space */}
       <div
-        className="w-full transition-all duration-300 group-hover:bg-[#0A0A0A] group-hover:shadow-inner"
-        style={{
-          backgroundColor: '#000000',
-          paddingTop: '4px',
-          borderRadius: '8px',
-          flex: '1',
-          paddingLeft: '8px', 
-          paddingRight: '8px',
-          paddingBottom: '8px', 
-          minHeight: '0'
-        }}
+        className="w-full transition-all duration-300 group-hover:bg-[#0A0A0A] group-hover:shadow-inner bg-black pt-1 rounded-lg flex-1 px-2 pb-2 min-h-0"
       >
         {/* Introduction paragraph */}
         <p
-          className="transition-colors duration-300 group-hover:text-gray-200"
-          style={{
-            color: '#FFFFFF',
-            fontSize: '14px',
-            lineHeight: '1.6',
-            marginBottom: '12px'
-          }}
+          className="transition-colors duration-300 group-hover:text-gray-200 text-white text-sm leading-[1.6] mb-3"
         >
           {story?.brief ? story.brief : 'Explore this investigative story to uncover connections and insights.'}
         </p>
@@ -189,33 +146,28 @@ const StoryCard = ({ story, onClick, onChapterSelect, totalNodes = 0, entityCoun
         {/* Statistics */}
         <div className="flex flex-col gap-0.5">
           <div 
-            className="transition-all duration-300 group-hover:translate-x-1"
-            style={{ color: '#7D7D7D', fontSize: '13px' }}
+            className="transition-all duration-300 group-hover:translate-x-1 text-[#7D7D7D] text-[13px]"
           >
             chapters: <strong className="transition-colors text-[15px] font-['Archivo'] text-white duration-300 group-hover:text-[#ffffff]">{formatNumber(totalChapters)}</strong>
           </div>
           <div 
-            className="transition-all duration-300 delay-100 group-hover:translate-x-1"
-            style={{ color: '#7D7D7D', fontSize: '13px' }}
+            className="transition-all duration-300 delay-100 group-hover:translate-x-1 text-[#7D7D7D] text-[13px]"
           >
             sections: <strong className="transition-colors text-[15px] font-['Archivo'] text-white duration-300 group-hover:text-[#ffffff]">{formatNumber(totalSections)}</strong>
           </div>
           <div 
-            className="transition-all duration-300 group-hover:translate-x-1"
-            style={{ color: '#7D7D7D', fontSize: '13px' }}
+            className="transition-all duration-300 group-hover:translate-x-1 text-[#7D7D7D] text-[13px]"
           >
             nodes: <strong className="transition-colors text-[15px] font-['Archivo'] text-white duration-300 group-hover:text-[#ffffff]">{formatNumber(displayTotalNodes)}</strong>
           </div>
           <div 
-            className="transition-all duration-300 delay-75 group-hover:translate-x-1"
-            style={{ color: '#7D7D7D', fontSize: '13px' }}
+            className="transition-all duration-300 delay-75 group-hover:translate-x-1 text-[#7D7D7D] text-[13px]"
           >
             entities mentioned: <strong className="transition-colors text-[15px] font-['Archivo'] text-white duration-300 group-hover:text-[#ffffff]">{formatNumber(entityCount)}</strong>
           </div>
           {updatedDate && (
             <div 
-              className="transition-all duration-300 delay-125 group-hover:translate-x-1 mt-2"
-              style={{ color: '#7D7D7D', fontSize: '12px' }}
+              className="transition-all duration-300 delay-125 group-hover:translate-x-1 mt-2 text-[#7D7D7D] text-xs"
             >
               updated: <strong className="transition-colors text-[13px] font-['Archivo'] text-[#9B9B9B] duration-300 group-hover:text-[#B4B4B4]">{formattedDate}</strong>
             </div>

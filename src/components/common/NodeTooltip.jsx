@@ -23,8 +23,8 @@ const NodeTooltip = ({ node, position }) => {
       style={{
         left: `${position.x}px`,
         top: `${position.y}px`,
-        transform: 'translate(-50%, -120%)', // Position above the cursor
       }}
+      className="-translate-x-1/2 -translate-y-[120%]"
     >
       <div className="bg-[#1E1E1E] border-l-4 border-[#5C9EFF] rounded-lg shadow-2xl overflow-hidden max-w-[400px] min-w-[300px]">
         <div className="flex">

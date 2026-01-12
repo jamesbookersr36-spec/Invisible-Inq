@@ -126,6 +126,27 @@ const HomePage = () => {
   // Initialize activity tracking
   useActivityTracking();
 
+  // Close user menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target)) {
+        setShowUserMenu(false);
+      }
+    };
+
+    if (showUserMenu) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+      };
+    }
+  }, [showUserMenu]);
+
+  const handleLogout = () => {
+    logout();
+    setShowUserMenu(false);
+  };
+
   // Helper function to normalize title for URL (lowercase, spaces/special chars to underscores)
   const normalizeTitleForURL = useCallback((title) => {
     if (!title) return null;

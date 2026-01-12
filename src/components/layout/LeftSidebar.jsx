@@ -490,8 +490,7 @@ const LeftSidebar = ({
               <button
                 onClick={onPrevious}
                 onKeyDown={(e) => e.key === 'Enter' && onPrevious && onPrevious()}
-                className="p-0 text-[#6EA4F4] text-sm flex items-center hover:opacity-80 transition-opacity"
-                style={{ textShadow: '0 0 4px rgba(110, 164, 244, 0.5)' }}
+                className="p-0 text-[#6EA4F4] text-sm flex items-center hover:opacity-80 transition-opacity drop-shadow-[0_0_4px_rgba(110,164,244,0.5)]"
                 aria-label="Go to previous segment"
                 tabIndex={0}
               >
@@ -504,8 +503,7 @@ const LeftSidebar = ({
               <button
                 onClick={onNext}
                 onKeyDown={(e) => e.key === 'Enter' && onNext && onNext()}
-                className="p-0 text-[#6EA4F4] text-sm flex items-center hover:opacity-80 transition-opacity"
-                style={{ textShadow: '0 0 4px rgba(110, 164, 244, 0.5)' }}
+                className="p-0 text-[#6EA4F4] text-sm flex items-center hover:opacity-80 transition-opacity drop-shadow-[0_0_4px_rgba(110,164,244,0.5)]"
                 aria-label="Go to next segment"
                 tabIndex={0}
               >

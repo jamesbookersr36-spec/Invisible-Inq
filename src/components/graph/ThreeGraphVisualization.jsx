@@ -4731,9 +4731,8 @@ const ThreeGraphVisualization = React.memo(({
       <div
         ref={containerRef}
         className="w-full h-full relative"
-        style={{
-          cursor: selectionMode === 'individual' ? 'default' : cursorStyle
-        }}
+        className={selectionMode === 'individual' ? 'cursor-default' : ''}
+        style={selectionMode !== 'individual' ? { cursor: cursorStyle } : undefined}
       >
         {/* Box selection visual overlay */}
         {selectionMode === 'box' && boxSelection.isSelecting && (

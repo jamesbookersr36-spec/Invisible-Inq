@@ -34,6 +34,10 @@ export function LoginPage() {
             src="/images/logo-with-text.png"
             alt="Invisible Inquiry Logo"
             className="h-12 mx-auto mb-4 object-contain"
+            onError={(e) => {
+              console.error("Logo image failed to load");
+              e.target.style.display = 'none';
+            }}
           />
           <h1 className="text-3xl font-bold text-white mb-2">Admin Dashboard</h1>
           <p className="text-gray-400">Sign in to access the admin panel</p>

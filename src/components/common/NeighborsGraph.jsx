@@ -422,7 +422,7 @@ const NeighborsGraph = ({ selectedNode, graphData, onClose, isSubgraph = false }
   }
 
   return (
-    <div ref={containerRef} className="w-full h-full relative bg-[#09090B] border border-[#707070] rounded-[5px]" style={{ height: '320px', width: '100%', borderBottomWidth: '1px', borderBottomStyle: 'solid', borderBottomColor: '#707070' }}>
+    <div ref={containerRef} className="w-full h-[320px] relative bg-[#09090B] border border-[#707070] border-b border-b-[#707070] rounded-[5px]">
       {/* Close button */}
       {onClose && (
         <button

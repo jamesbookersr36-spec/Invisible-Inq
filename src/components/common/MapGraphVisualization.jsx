@@ -195,7 +195,7 @@ const MapGraphVisualization = ({ graphData = { nodes: [], links: [] }, position 
         ref={svgRef}
         width={dimensions.width}
         height={dimensions.height}
-        style={{ display: 'block' }}
+        className="block"
       />
     </div>
   );

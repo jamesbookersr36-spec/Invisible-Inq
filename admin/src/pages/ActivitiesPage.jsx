@@ -51,23 +51,23 @@ export function ActivitiesPage() {
   if (loading && activities.length === 0) {
     return (
       <div className="flex items-center justify-center h-96">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-3xl font-bold text-white mb-2">User Activities</h1>
-          <p className="text-gray-400">Monitor and filter user activities</p>
+          <p className="text-gray-400 text-sm">Monitor and filter user activities</p>
         </div>
         <button
           onClick={handleRefresh}
-          className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+          className="flex items-center justify-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition text-sm font-medium"
         >
-          <FiRefreshCw className="mr-2" size={18} />
+          <FiRefreshCw className="mr-2" size={16} />
           Refresh
         </button>
       </div>
@@ -86,7 +86,7 @@ export function ActivitiesPage() {
             <select
               value={filters.days}
               onChange={(e) => handleFilterChange('days', parseInt(e.target.value))}
-              className="w-full px-4 py-2 border border-[#27272A] rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+              className="w-full px-4 py-2 border border-[#27272A] bg-[#09090B] text-white rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition placeholder-gray-500"
             >
               <option value={1}>Last 1 day</option>
               <option value={7}>Last 7 days</option>
@@ -101,7 +101,7 @@ export function ActivitiesPage() {
             <select
               value={filters.activity_type}
               onChange={(e) => handleFilterChange('activity_type', e.target.value)}
-              className="w-full px-4 py-2 border border-[#27272A] rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+              className="w-full px-4 py-2 border border-[#27272A] bg-[#09090B] text-white rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition placeholder-gray-500"
             >
               <option value="">All Types</option>
               {activityTypes.map(type => (
@@ -118,7 +118,7 @@ export function ActivitiesPage() {
               value={filters.user_id}
               onChange={(e) => handleFilterChange('user_id', e.target.value)}
               placeholder="Filter by user ID"
-              className="w-full px-4 py-2 border border-[#27272A] rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+              className="w-full px-4 py-2 border border-[#27272A] bg-[#09090B] text-white rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition placeholder-gray-500"
             />
           </div>
           <div>
@@ -128,7 +128,7 @@ export function ActivitiesPage() {
             <select
               value={filters.limit}
               onChange={(e) => handleFilterChange('limit', parseInt(e.target.value))}
-              className="w-full px-4 py-2 border border-[#27272A] rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+              className="w-full px-4 py-2 border border-[#27272A] bg-[#09090B] text-white rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition placeholder-gray-500"
             >
               <option value={50}>50</option>
               <option value={100}>100</option>
@@ -141,7 +141,7 @@ export function ActivitiesPage() {
 
       {/* Error Message */}
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+        <div className="bg-red-900/20 border border-red-500 text-red-400 px-4 py-3 rounded-lg">
           {error}
         </div>
       )}
@@ -157,48 +157,48 @@ export function ActivitiesPage() {
           <table className="w-full">
             <thead className="bg-[#09090B]">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                   User
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                   Session ID
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                   Activity Type
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                   Details
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                   Timestamp
                 </th>
               </tr>
             </thead>
-            <tbody className="bg-[#18181B] divide-y divide-gray-200">
+            <tbody className="bg-[#18181B] divide-y divide-[#27272A]">
               {activities.length === 0 ? (
                 <tr>
-                  <td colSpan="5" className="px-6 py-8 text-center text-gray-400">
+                  <td colSpan="5" className="px-4 py-8 text-center text-gray-400">
                     {loading ? 'Loading...' : 'No activities found'}
                   </td>
                 </tr>
               ) : (
                 activities.map((activity, index) => (
                   <tr key={index} className="hover:bg-[#09090B]">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-white">
                       {activity.user_email || activity.user_id || 'Unknown'}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400 font-mono">
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-400 font-mono">
                       {activity.session_id ? activity.session_id.substring(0, 8) + '...' : '-'}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-4 py-3 whitespace-nowrap">
                       <span className="px-2 py-1 text-xs font-medium rounded-full bg-indigo-600 text-white">
                         {activity.activity_type || 'N/A'}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-400 max-w-md truncate">
+                    <td className="px-4 py-3 text-sm text-gray-400 max-w-md truncate">
                       {activity.details || '-'}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
+                    <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-400">
                       {activity.timestamp ? 
                         new Date(activity.timestamp).toLocaleString() : '-'}
                     </td>
