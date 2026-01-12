@@ -14,7 +14,7 @@ from services import get_all_stories, get_graph_data, get_graph_data_by_section_
 from models import GraphData, UserCreate, UserLogin, Token, UserResponse, GoogleAuthRequest, UserActivityCreate, UserActivityResponse, AdminLoginRequest, SubmissionCreate, SubmissionResponse, UserSubscriptionResponse, SubmissionUpdateRequest
 from pydantic import BaseModel
 from auth import create_access_token, verify_google_token, get_current_user, get_current_admin_user
-from user_service import create_user, authenticate_user, get_user_by_email, create_or_update_google_user, get_user_by_id, get_all_users
+from user_service import create_user, authenticate_user, get_user_by_email, create_or_update_google_user, get_user_by_id, get_all_users, get_user_statistics
 from activity_service import create_activity, get_activities, get_activity_statistics, get_user_activity_summary
 from submission_service import create_submission, process_submission, get_submission, get_user_submissions, get_all_submissions
 from subscription_service import get_user_subscription, update_user_subscription, get_subscription_plan, SUBSCRIPTION_PLANS
@@ -746,6 +746,18 @@ async def get_all_users_endpoint(
     except Exception as e:
         logger.exception(f"Error getting users: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to get users: {str(e)}")
+
+@app.get("/api/admin/users/statistics")
+async def get_user_statistics_endpoint(
+    current_user: dict = Depends(get_current_admin_user)
+):
+    """Get user statistics (Admin only)"""
+    try:
+        stats = get_user_statistics()
+        return stats
+    except Exception as e:
+        logger.exception(f"Error getting user statistics: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get user statistics: {str(e)}")
 
 @app.get("/api/admin/dashboard")
 async def get_admin_dashboard(
