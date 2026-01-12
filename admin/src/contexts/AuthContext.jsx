@@ -40,10 +40,12 @@ export function AuthProvider({ children }) {
       if (response.access_token) {
         const decoded = jwtDecode(response.access_token);
         const userData = {
-          email: decoded.sub || email,
-          id: decoded.id,
+          email: decoded.email || response.user?.email || email,
+          id: decoded.id || response.user?.id,
           is_admin: decoded.is_admin || true,
-          full_name: decoded.full_name || 'Admin',
+          full_name: decoded.full_name || response.user?.full_name || 'Admin',
+          created_at: response.user?.created_at || null,
+          auth_provider: response.user?.auth_provider || decoded.auth_provider || 'local',
         };
         
         localStorage.setItem('admin_token', response.access_token);

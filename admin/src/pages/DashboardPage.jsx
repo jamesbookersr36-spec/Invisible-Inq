@@ -46,7 +46,7 @@ export function DashboardPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-96">
-        <Loader size={48} />
+        <span className="loader"></span>
       </div>
     );
   }
@@ -280,7 +280,6 @@ export function DashboardPage() {
                   const label = `${name} ${(percent * 100).toFixed(0)}%`;
                   return percent > 0.05 ? label : ''; // Only show label if slice is large enough
                 }}
-                labelLine={{ stroke: '#9ca3af' }}
                 outerRadius={80}
                 fill="#8884d8"
                 dataKey="value"

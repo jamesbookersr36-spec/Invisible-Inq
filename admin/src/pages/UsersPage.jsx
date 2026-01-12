@@ -16,11 +16,31 @@ export function UsersPage() {
     try {
       setLoading(true);
       setError('');
-      const data = await apiRequest('/api/admin/users');
-      setUsers(Array.isArray(data) ? data : []);
+      const data = await apiRequest('/api/admin/users?limit=1000');
+      console.log('API Response:', data);
+      
+      // Handle different response formats
+      let usersArray = [];
+      if (Array.isArray(data)) {
+        usersArray = data;
+      } else if (data && Array.isArray(data.users)) {
+        usersArray = data.users;
+      } else if (data && typeof data === 'object') {
+        // If it's an object, try to extract users array
+        usersArray = Object.values(data).find(val => Array.isArray(val)) || [];
+      }
+      
+      setUsers(usersArray);
+      console.log('Processed users:', usersArray.length, usersArray);
+      
+      if (usersArray.length === 0 && !loading) {
+        console.warn('No users returned from API');
+      }
     } catch (err) {
-      setError(err.message || 'Failed to load users');
+      const errorMessage = err.message || 'Failed to load users';
+      setError(errorMessage);
       console.error('Error fetching users:', err);
+      setUsers([]); // Clear users on error
     } finally {
       setLoading(false);
     }
@@ -33,14 +53,20 @@ export function UsersPage() {
   if (loading && users.length === 0) {
     return (
       <div className="flex items-center justify-center h-96">
-        <Loader size={48} />
+        <span className="loader"></span>
       </div>
     );
   }
 
+  // Calculate statistics - handle null/undefined values properly
   const totalUsers = users.length;
-  const activeUsers = users.filter(u => u.is_active !== false).length;
-  const adminUsers = users.filter(u => u.is_admin).length;
+  // Count active users: is_active is true, or null/undefined (defaults to active)
+  const activeUsers = users.filter(u => {
+    const isActive = u.is_active;
+    return isActive === true || isActive === undefined || isActive === null;
+  }).length;
+  // Count admin users: is_admin must be explicitly true
+  const adminUsers = users.filter(u => u.is_admin === true).length;
 
   return (
     <div className="space-y-6">
@@ -91,8 +117,17 @@ export function UsersPage() {
 
       {/* Error Message */}
       {error && (
-        <div className="bg-red-900/20 border border-red-500 text-red-400 px-4 py-3 rounded-lg">
-          {error}
+        <div className="bg-red-900/20 border border-red-500 text-red-400 px-4 py-3 rounded-lg mb-4">
+          <p className="font-medium">Error loading users:</p>
+          <p className="text-sm mt-1">{error}</p>
+          <p className="text-xs mt-2 text-red-300">Check browser console for details.</p>
+        </div>
+      )}
+      
+      {/* Debug Info (only in development) */}
+      {process.env.NODE_ENV === 'development' && users.length === 0 && !loading && (
+        <div className="bg-yellow-900/20 border border-yellow-500 text-yellow-400 px-4 py-3 rounded-lg mb-4">
+          <p className="text-sm">Debug: No users found. Check console for API response details.</p>
         </div>
       )}
 

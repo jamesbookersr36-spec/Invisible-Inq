@@ -336,6 +336,7 @@ def update_user_profile(user_id: str, updates: Dict) -> Optional[UserResponse]:
 def get_all_users(limit: int = 100, offset: int = 0) -> list:
     """
     Get all users from PostgreSQL database (for admin)
+    Includes both regular users and admin users
     
     Args:
         limit: Maximum number of users to return
@@ -345,6 +346,7 @@ def get_all_users(limit: int = 100, offset: int = 0) -> list:
         List of user dictionaries with subscription info
     """
     try:
+        # Get regular users
         query = """
         SELECT id, email, full_name, profile_picture, auth_provider, is_active, is_admin,
                subscription_tier, subscription_status, subscription_start_date, subscription_end_date,
@@ -374,7 +376,42 @@ def get_all_users(limit: int = 100, offset: int = 0) -> list:
                 "updated_at": row.get('updated_at').isoformat() if row.get('updated_at') else None
             })
         
+        # Also get admin users (from admin_users table)
+        try:
+            admin_query = """
+            SELECT id, email, full_name, profile_picture, auth_provider, is_active, is_admin,
+                   created_at, updated_at
+            FROM admin_users
+            ORDER BY created_at DESC
+            """
+            admin_result = neon_db.execute_query(admin_query)
+            
+            for row in admin_result:
+                users.append({
+                    "id": f"admin_{row['id']}",  # Prefix to avoid ID conflicts
+                    "email": row['email'],
+                    "full_name": row.get('full_name'),
+                    "profile_picture": row.get('profile_picture'),
+                    "auth_provider": row.get('auth_provider', 'local'),
+                    "is_active": row.get('is_active', True),
+                    "is_admin": True,  # Admin users are always admins
+                    "subscription_tier": None,
+                    "subscription_status": None,
+                    "subscription_start_date": None,
+                    "subscription_end_date": None,
+                    "created_at": row.get('created_at').isoformat() if row.get('created_at') else None,
+                    "updated_at": row.get('updated_at').isoformat() if row.get('updated_at') else None
+                })
+        except Exception as admin_err:
+            logger.warning(f"Could not fetch admin users: {admin_err}")
+            # Continue without admin users if table doesn't exist
+        
+        # Sort all users by created_at descending
+        users.sort(key=lambda x: x.get('created_at', ''), reverse=True)
+        
         return users
     except Exception as e:
         logger.error(f"Error getting all users: {e}")
+        import traceback
+        logger.error(traceback.format_exc())
         return []

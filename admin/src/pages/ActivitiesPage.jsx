@@ -52,7 +52,7 @@ export function ActivitiesPage() {
   if (loading && activities.length === 0) {
     return (
       <div className="flex items-center justify-center h-96">
-        <Loader size={48} />
+        <span className="loader"></span>
       </div>
     );
   }
