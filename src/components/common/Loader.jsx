@@ -13,8 +13,7 @@ const Loader = ({ size = 48, className = '', color = '#fff' }) => {
       style={{
         width: `${size}px`,
         height: `${size}px`,
-        color: color,
-        '--loader-color': color
+        color: color
       }}
     />
   );
