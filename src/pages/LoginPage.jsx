@@ -3,6 +3,8 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { GoogleLogin } from '@react-oauth/google';
 import { FiMail, FiLock, FiEye, FiEyeOff } from 'react-icons/fi';
+import ParticlesBackground from '../components/common/ParticlesBackground';
+import BackgroundOverlay from '../components/common/BackgroundOverlay';
 
 const LoginPage = () => {
   const [email, setEmail] = useState('');
@@ -67,8 +69,12 @@ const LoginPage = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-[#09090B] py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8">
+    <div className="min-h-screen flex items-center justify-center bg-[#09090B] py-12 px-4 sm:px-6 lg:px-8 relative">
+      {/* Particles Background */}
+      <ParticlesBackground className="z-0" />
+      {/* Background Overlay */}
+      <BackgroundOverlay opacity={0.2} gradient={true} className="z-0" />
+      <div className="max-w-md w-full space-y-8 relative z-10">
         <div>
           <Link to="/" className="flex justify-center">
             <img

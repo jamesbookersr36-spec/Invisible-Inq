@@ -22,6 +22,8 @@ import ConnectedData from '../components/common/ConnectedData';
 import VirtualizedTable from '../components/common/VirtualizedTable';
 import LazyJSONViewer from '../components/common/LazyJSONViewer';
 import Loader from '../components/common/Loader';
+import ParticlesBackground from '../components/common/ParticlesBackground';
+import BackgroundOverlay from '../components/common/BackgroundOverlay';
 import { FaProjectDiagram, FaTable, FaCode, FaSearch, FaDownload, FaCube, FaSquare, FaTimes, FaSearchPlus, FaSearchMinus, FaExpand, FaExpandArrowsAlt, FaEye, FaEyeSlash, FaPlus, FaFilter, FaSort, FaMousePointer, FaVectorSquare, FaChevronDown, FaSitemap } from 'react-icons/fa';
 import { getNodeTypeColor } from '../utils/colorUtils';
 
@@ -2095,9 +2097,13 @@ const HomePage = () => {
 
   if (!showGraphView) {
     return (
-      <div className="flex flex-col min-h-screen bg-black text-white">
+      <div className="flex flex-col min-h-screen bg-black text-white relative overflow-hidden">
+        {/* Particles Background */}
+        <ParticlesBackground className="z-0 fixed inset-0" />
+        {/* Background Overlay */}
+        <BackgroundOverlay opacity={0.15} gradient={true} className="z-0 fixed inset-0" />
         {}
-        <header className="bg-[#09090B] text-white shadow-md sticky top-0 z-50 flex h-8 items-center">
+        <header className="bg-[#09090B]/80 backdrop-blur-sm text-white shadow-md sticky top-0 z-50 flex h-8 items-center relative">
           {}
           <div className="h-full flex items-center ml-8 pl-2">
             <img
@@ -2158,7 +2164,7 @@ const HomePage = () => {
           <DonationPopup onClose={() => setShowDonationPopup(false)} />
         )}
         {}
-        <main className="flex-1 flex flex-col bg-black w-full">
+        <main className="flex-1 flex flex-col bg-transparent w-full relative z-10">
           {}
           {/* Logo section */}
           <div className="flex justify-center items-center px-6 sm:px-8 lg:px-12 xl:px-16 pt-8 pb-6 w-full">
