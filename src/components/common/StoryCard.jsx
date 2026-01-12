@@ -76,6 +76,9 @@ const StoryCard = ({ story, onClick, onChapterSelect, totalNodes = 0, entityCoun
         padding: '0px',
         position: 'relative',
         minHeight: '0',
+        border: '1px solid #d3d3d3',
+        borderRadius: '5px',
+        padding: '1px',
         transform: 'translateY(0)',
       }}
       onClick={onClick}
@@ -84,6 +87,7 @@ const StoryCard = ({ story, onClick, onChapterSelect, totalNodes = 0, entityCoun
       <div 
         className="relative w-full overflow-hidden transition-all duration-300 group-hover:brightness-110"
         style={{
+          borderRadius: '5px',
           backgroundColor: '#D3D3D3', // Light grey
           aspectRatio: '297 / 191',
           position: 'relative',
@@ -163,6 +167,9 @@ const StoryCard = ({ story, onClick, onChapterSelect, totalNodes = 0, entityCoun
           paddingTop: '4px',
           borderRadius: '8px',
           flex: '1',
+          paddingLeft: '8px', 
+          paddingRight: '8px',
+          paddingBottom: '8px', 
           minHeight: '0'
         }}
       >

@@ -21,16 +21,23 @@ export function Layout({ children }) {
   ];
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-black">
       {/* Sidebar */}
-      <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-gray-900 text-white transform transition-transform duration-300 ease-in-out ${
+      <div className={`fixed inset-y-0 left-0 z-50 w-64 bg-[#09090B] text-white transform transition-transform duration-300 ease-in-out ${
         sidebarOpen ? 'translate-x-0' : '-translate-x-full'
       } lg:translate-x-0`}>
-        <div className="flex items-center justify-between h-16 px-6 border-b border-gray-800">
-          <h1 className="text-xl font-bold">Admin Dashboard</h1>
+        <div className="flex items-center justify-between h-16 px-6 border-b border-[#27272A]">
+          <div className="flex items-center gap-3">
+            <img
+              src="/images/logo-with-text.png"
+              alt="Invisible Inquiry Logo"
+              className="h-6 object-contain"
+            />
+            <h1 className="text-lg font-semibold text-white">Admin</h1>
+          </div>
           <button
             onClick={() => setSidebarOpen(false)}
-            className="lg:hidden text-gray-400 hover:text-white"
+            className="lg:hidden text-gray-400 hover:text-white transition-colors"
           >
             <FiX size={24} />
           </button>
@@ -47,8 +54,8 @@ export function Layout({ children }) {
                 onClick={() => setSidebarOpen(false)}
                 className={`flex items-center px-4 py-3 mb-2 rounded-lg transition-colors ${
                   isActive
-                    ? 'bg-blue-600 text-white'
-                    : 'text-gray-300 hover:bg-gray-800 hover:text-white'
+                    ? 'bg-indigo-600 text-white'
+                    : 'text-gray-300 hover:bg-[#27272A] hover:text-white'
                 }`}
               >
                 <Icon className="mr-3" size={20} />
@@ -58,14 +65,14 @@ export function Layout({ children }) {
           })}
         </nav>
 
-        <div className="absolute bottom-0 w-full p-4 border-t border-gray-800">
+        <div className="absolute bottom-0 w-full p-4 border-t border-[#27272A]">
           <div className="mb-4 px-4">
             <p className="text-sm text-gray-400">Logged in as</p>
             <p className="text-white font-medium truncate">{user?.email || 'Admin'}</p>
           </div>
           <button
             onClick={handleLogout}
-            className="w-full flex items-center px-4 py-3 text-gray-300 hover:bg-gray-800 hover:text-white rounded-lg transition-colors"
+            className="w-full flex items-center px-4 py-3 text-gray-300 hover:bg-[#27272A] hover:text-white rounded-lg transition-colors"
           >
             <FiLogOut className="mr-3" size={20} />
             Logout
@@ -76,7 +83,7 @@ export function Layout({ children }) {
       {/* Overlay for mobile */}
       {sidebarOpen && (
         <div
-          className="fixed inset-0 bg-black bg-opacity-50 z-40 lg:hidden"
+          className="fixed inset-0 bg-black bg-opacity-70 z-40 lg:hidden"
           onClick={() => setSidebarOpen(false)}
         />
       )}
@@ -84,22 +91,22 @@ export function Layout({ children }) {
       {/* Main content */}
       <div className="lg:pl-64">
         {/* Top bar */}
-        <div className="sticky top-0 z-30 bg-white shadow-sm border-b border-gray-200">
+        <div className="sticky top-0 z-30 bg-[#09090B]/80 backdrop-blur-sm shadow-sm border-b border-[#27272A]">
           <div className="flex items-center justify-between h-16 px-6">
             <button
               onClick={() => setSidebarOpen(true)}
-              className="lg:hidden text-gray-600 hover:text-gray-900"
+              className="lg:hidden text-gray-400 hover:text-white transition-colors"
             >
               <FiMenu size={24} />
             </button>
             <div className="flex items-center space-x-4">
-              <span className="text-sm text-gray-600">{user?.full_name || 'Admin'}</span>
+              <span className="text-sm text-white">{user?.full_name || 'Admin'}</span>
             </div>
           </div>
         </div>
 
         {/* Page content */}
-        <main className="p-6">{children}</main>
+        <main className="p-6 bg-black">{children}</main>
       </div>
     </div>
   );

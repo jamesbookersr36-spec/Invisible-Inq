@@ -60,8 +60,8 @@ export function ActivitiesPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">User Activities</h1>
-          <p className="text-gray-600">Monitor and filter user activities</p>
+          <h1 className="text-3xl font-bold text-white mb-2">User Activities</h1>
+          <p className="text-gray-400">Monitor and filter user activities</p>
         </div>
         <button
           onClick={handleRefresh}
@@ -73,20 +73,20 @@ export function ActivitiesPage() {
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+      <div className="bg-[#18181B] rounded-lg shadow-sm border border-[#27272A] p-4">
         <div className="flex items-center mb-4">
-          <FiFilter className="mr-2 text-gray-600" size={18} />
-          <h2 className="text-lg font-semibold text-gray-900">Filters</h2>
+          <FiFilter className="mr-2 text-gray-400" size={18} />
+          <h2 className="text-lg font-semibold text-white">Filters</h2>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-gray-300 mb-2">
               Days
             </label>
             <select
               value={filters.days}
               onChange={(e) => handleFilterChange('days', parseInt(e.target.value))}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+              className="w-full px-4 py-2 border border-[#27272A] rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
             >
               <option value={1}>Last 1 day</option>
               <option value={7}>Last 7 days</option>
@@ -95,13 +95,13 @@ export function ActivitiesPage() {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-gray-300 mb-2">
               Activity Type
             </label>
             <select
               value={filters.activity_type}
               onChange={(e) => handleFilterChange('activity_type', e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+              className="w-full px-4 py-2 border border-[#27272A] rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
             >
               <option value="">All Types</option>
               {activityTypes.map(type => (
@@ -110,7 +110,7 @@ export function ActivitiesPage() {
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-gray-300 mb-2">
               User ID
             </label>
             <input
@@ -118,17 +118,17 @@ export function ActivitiesPage() {
               value={filters.user_id}
               onChange={(e) => handleFilterChange('user_id', e.target.value)}
               placeholder="Filter by user ID"
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+              className="w-full px-4 py-2 border border-[#27272A] rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-gray-300 mb-2">
               Limit
             </label>
             <select
               value={filters.limit}
               onChange={(e) => handleFilterChange('limit', parseInt(e.target.value))}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+              className="w-full px-4 py-2 border border-[#27272A] rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
             >
               <option value={50}>50</option>
               <option value={100}>100</option>
@@ -147,58 +147,58 @@ export function ActivitiesPage() {
       )}
 
       {/* Activities Table */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-xl font-semibold text-gray-900">
+      <div className="bg-[#18181B] rounded-lg shadow-sm border border-[#27272A]">
+        <div className="px-6 py-4 border-b border-[#27272A]">
+          <h2 className="text-xl font-semibold text-white">
             Activities ({activities.length})
           </h2>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-gray-50">
+            <thead className="bg-[#09090B]">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                   User
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                   Session ID
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                   Activity Type
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                   Details
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                   Timestamp
                 </th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="bg-[#18181B] divide-y divide-gray-200">
               {activities.length === 0 ? (
                 <tr>
-                  <td colSpan="5" className="px-6 py-8 text-center text-gray-500">
+                  <td colSpan="5" className="px-6 py-8 text-center text-gray-400">
                     {loading ? 'Loading...' : 'No activities found'}
                   </td>
                 </tr>
               ) : (
                 activities.map((activity, index) => (
-                  <tr key={index} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  <tr key={index} className="hover:bg-[#09090B]">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
                       {activity.user_email || activity.user_id || 'Unknown'}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600 font-mono">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400 font-mono">
                       {activity.session_id ? activity.session_id.substring(0, 8) + '...' : '-'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
+                      <span className="px-2 py-1 text-xs font-medium rounded-full bg-indigo-600 text-white">
                         {activity.activity_type || 'N/A'}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-600 max-w-md truncate">
+                    <td className="px-6 py-4 text-sm text-gray-400 max-w-md truncate">
                       {activity.details || '-'}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
                       {activity.timestamp ? 
                         new Date(activity.timestamp).toLocaleString() : '-'}
                     </td>

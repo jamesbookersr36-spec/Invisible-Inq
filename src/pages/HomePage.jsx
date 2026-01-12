@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useLocation, Link, useNavigate } from 'react-router-dom';
 import { useToast } from '../contexts/ToastContext';
+import { useAuth } from '../contexts/AuthContext';
 import Layout from '../components/layout/Layout';
 import ThreeGraphVisualization from '../components/graph/ThreeGraphVisualization';
 import GraphControls from '../components/graph/GraphControls';
@@ -25,12 +26,16 @@ import Loader from '../components/common/Loader';
 import ParticlesBackground from '../components/common/ParticlesBackground';
 import BackgroundOverlay from '../components/common/BackgroundOverlay';
 import { FaProjectDiagram, FaTable, FaCode, FaSearch, FaDownload, FaCube, FaSquare, FaTimes, FaSearchPlus, FaSearchMinus, FaExpand, FaExpandArrowsAlt, FaEye, FaEyeSlash, FaPlus, FaFilter, FaSort, FaMousePointer, FaVectorSquare, FaChevronDown, FaSitemap } from 'react-icons/fa';
+import { FiUser, FiLogOut, FiChevronDown } from 'react-icons/fi';
 import { getNodeTypeColor } from '../utils/colorUtils';
 
 const HomePage = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { showSuccess, showError, showWarning } = useToast();
+  const { user, logout, isAuthenticated } = useAuth();
+  const [showUserMenu, setShowUserMenu] = useState(false);
+  const userMenuRef = useRef(null);
   const [showGraphView, setShowGraphView] = useState(false);
   const [storyStatistics, setStoryStatistics] = useState({});
   const [forceStrength, setForceStrength] = useState(50);
@@ -2155,8 +2160,116 @@ const HomePage = () => {
           </div>
 
           {}
-          <div className="hidden mr-4 lg:flex">
-            <span className="text-white text-sm">Graph Viewer 1.0</span>
+          {/* User Menu and Version Info - Desktop */}
+          <div className="hidden lg:flex items-center gap-4 mr-4">
+            {isAuthenticated() ? (
+              <div className="relative" ref={userMenuRef}>
+                <button
+                  onClick={() => setShowUserMenu(!showUserMenu)}
+                  className="flex items-center gap-2 text-white hover:text-gray-300 transition-colors"
+                >
+                  {user?.profile_picture ? (
+                    <img
+                      src={user.profile_picture}
+                      alt={user.full_name || user.email}
+                      className="w-6 h-6 rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-6 h-6 rounded-full bg-indigo-600 flex items-center justify-center">
+                      <FiUser className="w-3 h-3" />
+                    </div>
+                  )}
+                  <span className="text-xs hidden xl:inline">
+                    {user?.full_name || user?.email?.split('@')[0]}
+                  </span>
+                  <FiChevronDown className="w-3 h-3" />
+                </button>
+
+                {showUserMenu && (
+                  <div className="absolute right-0 mt-2 w-48 bg-[#18181B] border border-[#27272A] rounded-md shadow-lg py-1 z-50">
+                    <div className="px-4 py-2 border-b border-[#27272A]">
+                      <p className="text-sm font-medium text-white truncate">
+                        {user?.full_name || 'User'}
+                      </p>
+                      <p className="text-xs text-gray-400 truncate">{user?.email}</p>
+                    </div>
+                    <button
+                      onClick={handleLogout}
+                      className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-[#27272A] flex items-center gap-2"
+                    >
+                      <FiLogOut className="w-4 h-4" />
+                      Sign out
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <Link
+                  to="/login"
+                  className="text-white hover:text-gray-300 transition-colors text-xs"
+                >
+                  Sign in
+                </Link>
+                <span className="text-white text-xs">|</span>
+                <Link
+                  to="/register"
+                  className="bg-indigo-600 text-white px-2 py-1 rounded-md hover:bg-indigo-700 transition-colors text-xs"
+                >
+                  Sign up
+                </Link>
+              </div>
+            )}
+            <span className="text-white text-xs">Graph Viewer 1.0</span>
+          </div>
+
+          {/* Mobile - Show auth */}
+          <div className="lg:hidden flex items-center gap-2 mr-4">
+            {isAuthenticated() ? (
+              <div className="relative" ref={userMenuRef}>
+                <button
+                  onClick={() => setShowUserMenu(!showUserMenu)}
+                  className="flex items-center text-white hover:text-gray-300 transition-colors"
+                >
+                  {user?.profile_picture ? (
+                    <img
+                      src={user.profile_picture}
+                      alt={user.full_name || user.email}
+                      className="w-6 h-6 rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-6 h-6 rounded-full bg-indigo-600 flex items-center justify-center">
+                      <FiUser className="w-3 h-3" />
+                    </div>
+                  )}
+                </button>
+
+                {showUserMenu && (
+                  <div className="absolute right-0 mt-2 w-48 bg-[#18181B] border border-[#27272A] rounded-md shadow-lg py-1 z-50">
+                    <div className="px-4 py-2 border-b border-[#27272A]">
+                      <p className="text-sm font-medium text-white truncate">
+                        {user?.full_name || 'User'}
+                      </p>
+                      <p className="text-xs text-gray-400 truncate">{user?.email}</p>
+                    </div>
+                    <button
+                      onClick={handleLogout}
+                      className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-[#27272A] flex items-center gap-2"
+                    >
+                      <FiLogOut className="w-4 h-4" />
+                      Sign out
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <Link
+                to="/login"
+                className="text-white hover:text-gray-300 transition-colors text-xs"
+              >
+                Sign in
+              </Link>
+            )}
           </div>
         </header>
         {}

@@ -75,10 +75,20 @@ const LoginPage = () => {
       {/* Background Overlay */}
       <BackgroundOverlay opacity={0.2} gradient={true} className="z-0" />
       <div className="max-w-md w-full space-y-8 relative z-10">
-        <div>
+
+
+        <div className="bg-[#18181B] border border-[#27272A] py-8 px-4 shadow-xl rounded-lg sm:px-10">
+          {errorMessage && (
+            <div className="mb-4 bg-red-900/20 border border-red-500 text-red-400 px-4 py-3 rounded relative">
+              <span className="block sm:inline">{errorMessage}</span>
+            </div>
+          )}
+
+          <form className="space-y-6" onSubmit={handleSubmit}>
+          <div>
           <Link to="/" className="flex justify-center">
             <img
-              className="h-16 w-auto"
+              className="h-12 w-auto"
               src="/images/logo-with-text.png"
               alt="Logo"
               onError={(e) => {
@@ -99,15 +109,6 @@ const LoginPage = () => {
             </Link>
           </p>
         </div>
-
-        <div className="bg-[#18181B] border border-[#27272A] py-8 px-4 shadow-xl rounded-lg sm:px-10">
-          {errorMessage && (
-            <div className="mb-4 bg-red-900/20 border border-red-500 text-red-400 px-4 py-3 rounded relative">
-              <span className="block sm:inline">{errorMessage}</span>
-            </div>
-          )}
-
-          <form className="space-y-6" onSubmit={handleSubmit}>
             <div>
               <label htmlFor="email" className="block text-sm font-medium text-gray-200">
                 Email address

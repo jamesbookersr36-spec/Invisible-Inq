@@ -45,8 +45,8 @@ export function UsersPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">User Management</h1>
-          <p className="text-gray-600">View and manage all users</p>
+          <h1 className="text-3xl font-bold text-white mb-2">User Management</h1>
+          <p className="text-gray-400">View and manage all users</p>
         </div>
         <button
           onClick={handleRefresh}
@@ -59,32 +59,32 @@ export function UsersPage() {
 
       {/* Statistics */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div className="bg-[#18181B] rounded-lg shadow-sm border border-[#27272A] p-6">
           <div className="flex items-center justify-between mb-4">
             <div className="p-3 rounded-lg bg-blue-500 text-white">
               <FiUsers size={24} />
             </div>
           </div>
-          <h3 className="text-sm font-medium text-gray-600 mb-1">Total Users</h3>
-          <p className="text-3xl font-bold text-gray-900">{totalUsers}</p>
+          <h3 className="text-sm font-medium text-gray-400 mb-1">Total Users</h3>
+          <p className="text-3xl font-bold text-white">{totalUsers}</p>
         </div>
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div className="bg-[#18181B] rounded-lg shadow-sm border border-[#27272A] p-6">
           <div className="flex items-center justify-between mb-4">
             <div className="p-3 rounded-lg bg-green-500 text-white">
               <FiCheckCircle size={24} />
             </div>
           </div>
-          <h3 className="text-sm font-medium text-gray-600 mb-1">Active Users</h3>
-          <p className="text-3xl font-bold text-gray-900">{activeUsers}</p>
+          <h3 className="text-sm font-medium text-gray-400 mb-1">Active Users</h3>
+          <p className="text-3xl font-bold text-white">{activeUsers}</p>
         </div>
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+        <div className="bg-[#18181B] rounded-lg shadow-sm border border-[#27272A] p-6">
           <div className="flex items-center justify-between mb-4">
             <div className="p-3 rounded-lg bg-purple-500 text-white">
               <FiUser size={24} />
             </div>
           </div>
-          <h3 className="text-sm font-medium text-gray-600 mb-1">Admin Users</h3>
-          <p className="text-3xl font-bold text-gray-900">{adminUsers}</p>
+          <h3 className="text-sm font-medium text-gray-400 mb-1">Admin Users</h3>
+          <p className="text-3xl font-bold text-white">{adminUsers}</p>
         </div>
       </div>
 
@@ -96,59 +96,59 @@ export function UsersPage() {
       )}
 
       {/* Users Table */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-xl font-semibold text-gray-900">
+      <div className="bg-[#18181B] rounded-lg shadow-sm border border-[#27272A]">
+        <div className="px-6 py-4 border-b border-[#27272A]">
+          <h2 className="text-xl font-semibold text-white">
             All Users ({users.length})
           </h2>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-gray-50">
+            <thead className="bg-[#09090B]">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                   Email
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                   Name
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                   Auth Provider
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                   Status
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                   Role
                 </th>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                   Created At
                 </th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="bg-[#18181B] divide-y divide-gray-200">
               {users.length === 0 ? (
                 <tr>
-                  <td colSpan="6" className="px-6 py-8 text-center text-gray-500">
+                  <td colSpan="6" className="px-6 py-8 text-center text-gray-400">
                     {loading ? 'Loading...' : 'No users found'}
                   </td>
                 </tr>
               ) : (
                 users.map((user, index) => (
-                  <tr key={index} className="hover:bg-gray-50">
+                  <tr key={index} className="hover:bg-[#09090B]">
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="flex items-center">
                         <FiMail className="mr-2 text-gray-400" size={16} />
-                        <span className="text-sm font-medium text-gray-900">
+                        <span className="text-sm font-medium text-white">
                           {user.email || '-'}
                         </span>
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
                       {user.full_name || '-'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-800">
+                      <span className="px-2 py-1 text-xs font-medium rounded-full bg-[#27272A] text-gray-300">
                         {user.auth_provider || 'local'}
                       </span>
                     </td>
@@ -171,12 +171,12 @@ export function UsersPage() {
                           Admin
                         </span>
                       ) : (
-                        <span className="px-2 py-1 text-xs font-medium rounded-full bg-gray-100 text-gray-800">
+                        <span className="px-2 py-1 text-xs font-medium rounded-full bg-[#27272A] text-gray-300">
                           User
                         </span>
                       )}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
                       {user.created_at ? 
                         new Date(user.created_at).toLocaleDateString() : '-'}
                     </td>

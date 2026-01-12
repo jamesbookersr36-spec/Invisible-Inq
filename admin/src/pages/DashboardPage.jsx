@@ -94,8 +94,8 @@ export function DashboardPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Dashboard</h1>
-        <p className="text-gray-600">Overview of system statistics and recent activities</p>
+        <h1 className="text-3xl font-bold text-white mb-2">Dashboard</h1>
+        <p className="text-gray-400">Overview of system statistics and recent activities</p>
       </div>
 
       {/* Statistics Cards */}
@@ -103,30 +103,30 @@ export function DashboardPage() {
         {statCards.map((stat, index) => {
           const Icon = stat.icon;
           return (
-            <div key={index} className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
+            <div key={index} className="bg-[#18181B] rounded-lg shadow-sm border border-[#27272A] p-6">
               <div className="flex items-center justify-between mb-4">
                 <div className={`p-3 rounded-lg ${getColorClasses(stat.color)}`}>
                   <Icon size={24} />
                 </div>
-                <span className="text-sm text-gray-500">{stat.change} of 30d</span>
+                <span className="text-sm text-gray-400">{stat.change} of 30d</span>
               </div>
-              <h3 className="text-sm font-medium text-gray-600 mb-1">{stat.title}</h3>
-              <p className="text-3xl font-bold text-gray-900">{stat.value}</p>
+              <h3 className="text-sm font-medium text-gray-400 mb-1">{stat.title}</h3>
+              <p className="text-3xl font-bold text-white">{stat.value}</p>
             </div>
           );
         })}
       </div>
 
       {/* Recent Activities */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-        <div className="px-6 py-4 border-b border-gray-200">
-          <h2 className="text-xl font-semibold text-gray-900">Recent Activities</h2>
+      <div className="bg-[#18181B] rounded-lg shadow-sm border border-[#27272A]">
+        <div className="px-6 py-4 border-b border-[#27272A]">
+          <h2 className="text-xl font-semibold text-white">Recent Activities</h2>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
-            <thead className="bg-gray-50">
+            <thead className="bg-[#09090B]">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                   User
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -140,28 +140,28 @@ export function DashboardPage() {
                 </th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
+            <tbody className="bg-[#18181B] divide-y divide-[#27272A]">
               {recentActivities.length === 0 ? (
                 <tr>
-                  <td colSpan="4" className="px-6 py-8 text-center text-gray-500">
+                  <td colSpan="4" className="px-6 py-8 text-center text-gray-400">
                     No activities found
                   </td>
                 </tr>
               ) : (
                 recentActivities.map((activity, index) => (
-                  <tr key={index} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  <tr key={index} className="hover:bg-[#27272A]">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
                       {activity.user_email || activity.user_id || 'Unknown'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="px-2 py-1 text-xs font-medium rounded-full bg-blue-100 text-blue-800">
+                      <span className="px-2 py-1 text-xs font-medium rounded-full bg-indigo-600 text-white">
                         {activity.activity_type || 'N/A'}
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
+                    <td className="px-6 py-4 text-sm text-gray-300">
                       {activity.details || '-'}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
                       {activity.timestamp ? 
                         new Date(activity.timestamp).toLocaleString() : '-'}
                     </td>
