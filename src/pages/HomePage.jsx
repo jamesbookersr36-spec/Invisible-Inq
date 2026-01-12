@@ -6,6 +6,7 @@ import ThreeGraphVisualization from '../components/graph/ThreeGraphVisualization
 import GraphControls from '../components/graph/GraphControls';
 import CombinedStoryDropdown from '../components/story/CombinedStoryDropdown';
 import useGraphData from '../hooks/useGraphData';
+import { useActivityTracking } from '../hooks/useActivityTracking';
 import DonationPopup from '../components/common/DonationPopup';
 import AISearchModal from '../components/common/AISearchModal';
 import AISummaryModal from '../components/common/AISummaryModal';
@@ -114,6 +115,9 @@ const HomePage = () => {
     performAISearch,
     executeCypherQuery
   } = useGraphData();
+
+  // Initialize activity tracking
+  useActivityTracking();
 
   // Helper function to normalize title for URL (lowercase, spaces/special chars to underscores)
   const normalizeTitleForURL = useCallback((title) => {

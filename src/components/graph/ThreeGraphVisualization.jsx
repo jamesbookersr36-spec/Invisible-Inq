@@ -545,6 +545,7 @@ const ThreeGraphVisualization = React.memo(({
   const selectedRegionRef = useRef(null); // Ref to track selectedRegion for handlers
   const [isHoveringSelected, setIsHoveringSelected] = useState(false); // Track if hovering over selected items
   const [selectedRegion, setSelectedRegion] = useState(null); // Store the selected region bounds/path
+  const [webglError, setWebglError] = useState(null); // Track WebGL initialization errors
   const nodeLookupMapRef = useRef(new Map()); // Fast O(1) node lookup map
   const previousDataRef = useRef(null); // Track previous data for incremental updates
   
@@ -964,11 +965,32 @@ const ThreeGraphVisualization = React.memo(({
       }
     }
 
-    // Initialize a new graph instance
-    graphRef.current = ForceGraph3D()(containerRef.current);
-
-    // Register this as the active graph instance
-    setActiveGraphInstance(graphRef.current);
+    // Initialize a new graph instance with error handling
+    try {
+      graphRef.current = ForceGraph3D()(containerRef.current);
+      
+      // Register this as the active graph instance
+      setActiveGraphInstance(graphRef.current);
+      
+      // Clear any previous WebGL errors if initialization succeeded
+      setWebglError(null);
+    } catch (error) {
+      console.error('Error initializing ForceGraph3D:', error);
+      const errorMessage = String(error?.message || error || 'Unknown error');
+      
+      // Check if it's a WebGL context error (various patterns)
+      if (errorMessage.includes('WebGL') || 
+          errorMessage.includes('WebGL context') || 
+          errorMessage.includes('BindToCurrentSequence') ||
+          errorMessage.includes('Could not create a WebGL context')) {
+        setWebglError('WebGL is not available in your browser or environment. The 3D graph visualization cannot be displayed.');
+      } else {
+        setWebglError(`Failed to initialize graph: ${errorMessage}`);
+      }
+      
+      // Don't continue initialization if graph creation failed
+      return;
+    }
 
     // Create a custom link material function that supports gradients
     graphRef.current.linkMaterial((link) => {
@@ -4659,6 +4681,25 @@ const ThreeGraphVisualization = React.memo(({
     }
   }, [selectedNodes.size]);
 
+
+  // Show error state if WebGL initialization failed
+  if (webglError) {
+    return (
+      <div
+        ref={containerRef}
+        className="w-full h-full relative flex items-center justify-center bg-[#09090B]"
+      >
+        <div className="text-center px-8 py-6 bg-[#18181B] border border-[#3F3F46] rounded-lg max-w-md">
+          <div className="text-red-400 text-xl font-semibold mb-2">WebGL Not Available</div>
+          <div className="text-gray-300 text-sm mb-4">{webglError}</div>
+          <div className="text-gray-400 text-xs">
+            This may occur in virtualized environments or when WebGL is disabled in your browser.
+            Please try using a different browser or enabling hardware acceleration.
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // Use full height of parent container regardless of device
   // If no data, display empty state component (only after loading is complete)

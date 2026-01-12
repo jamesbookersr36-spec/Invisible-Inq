@@ -7,36 +7,61 @@ import AboutPage from './pages/AboutPage';
 import ContactPage from './pages/ContactPage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
+import SubmissionPage from './pages/SubmissionPage';
 import ProtectedRoute from './components/common/ProtectedRoute';
 
 // Get Google Client ID from environment variables
 const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
 
 function App() {
-  return (
-    <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
+  // Only wrap with GoogleOAuthProvider if client ID is provided
+  const AppContent = () => (
       <ToastProvider>
         <Router>
           <AuthProvider>
             <Routes>
-              <Route path="/" element={<HomePage />} />
-              <Route path="/about" element={<AboutPage />} />
-              <Route path="/contact" element={<ContactPage />} />
+              {/* Public routes - shown before authentication */}
               <Route path="/login" element={<LoginPage />} />
               <Route path="/register" element={<RegisterPage />} />
               
-              {/* Protected routes example - uncomment and add your protected routes here */}
-              {/* <Route path="/dashboard" element={
+              {/* Protected routes - require authentication */}
+              <Route path="/" element={
                 <ProtectedRoute>
-                  <DashboardPage />
+                  <HomePage />
                 </ProtectedRoute>
-              } /> */}
+              } />
+              <Route path="/about" element={
+                <ProtectedRoute>
+                  <AboutPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/contact" element={
+                <ProtectedRoute>
+                  <ContactPage />
+                </ProtectedRoute>
+              } />
+              <Route path="/submissions" element={
+                <ProtectedRoute>
+                  <SubmissionPage />
+                </ProtectedRoute>
+              } />
             </Routes>
           </AuthProvider>
         </Router>
       </ToastProvider>
-    </GoogleOAuthProvider>
   );
+
+  // Only use GoogleOAuthProvider if client ID is configured
+  if (GOOGLE_CLIENT_ID) {
+    return (
+      <GoogleOAuthProvider clientId={GOOGLE_CLIENT_ID}>
+        <AppContent />
+      </GoogleOAuthProvider>
+    );
+  }
+
+  // Return app without Google OAuth provider if client ID is not set
+  return <AppContent />;
 }
 
 export default App;

@@ -1,17 +1,19 @@
 """
 User activity tracking service for analytics
+Uses PostgreSQL (Neon) instead of Neo4j
 """
 from typing import Optional, List, Dict
 from datetime import datetime, timedelta
 import logging
-from database import db
+from neon_database import neon_db
 from models import UserActivityCreate, UserActivityResponse
+import json
 
 logger = logging.getLogger(__name__)
 
 def create_activity(activity_data: UserActivityCreate) -> Optional[UserActivityResponse]:
     """
-    Create a new activity record in Neo4j database
+    Create a new activity record in PostgreSQL database
     
     Args:
         activity_data: Activity data to record
@@ -20,56 +22,66 @@ def create_activity(activity_data: UserActivityCreate) -> Optional[UserActivityR
         UserActivityResponse if successful, None otherwise
     """
     try:
-        # Create activity node in Neo4j
+        # Insert activity into PostgreSQL
         query = """
-        CREATE (a:UserActivity {
-            user_id: $user_id,
-            session_id: $session_id,
-            activity_type: $activity_type,
-            page_url: $page_url,
-            section_id: $section_id,
-            section_title: $section_title,
-            duration_seconds: $duration_seconds,
-            metadata: $metadata,
-            timestamp: datetime()
-        })
-        RETURN a, elementId(a) as activity_id
+        INSERT INTO user_activities (user_id, session_id, activity_type, page_url, 
+                                     section_id, section_title, duration_seconds, metadata, timestamp)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, CURRENT_TIMESTAMP)
+        RETURNING id, user_id, session_id, activity_type, page_url, section_id, 
+                  section_title, duration_seconds, metadata, timestamp
         """
         
-        params = {
-            "user_id": activity_data.user_id,
-            "session_id": activity_data.session_id,
-            "activity_type": activity_data.activity_type,
-            "page_url": activity_data.page_url,
-            "section_id": activity_data.section_id,
-            "section_title": activity_data.section_title,
-            "duration_seconds": activity_data.duration_seconds,
-            "metadata": activity_data.metadata
-        }
+        # Convert metadata dict to JSON string if present
+        metadata_json = None
+        if activity_data.metadata:
+            metadata_json = json.dumps(activity_data.metadata)
         
-        result = db.execute_write_query(query, params)
+        params = (
+            activity_data.user_id,
+            activity_data.session_id,
+            activity_data.activity_type,
+            activity_data.page_url,
+            activity_data.section_id,
+            activity_data.section_title,
+            activity_data.duration_seconds,
+            metadata_json
+        )
+        
+        result = neon_db.execute_query(query, params)
         
         if result and len(result) > 0:
-            activity_node = result[0].get('a', {})
-            activity_id = result[0].get('activity_id', '')
+            activity_row = result[0]
+            
+            # Parse metadata JSON back to dict
+            metadata = None
+            if activity_row.get('metadata'):
+                try:
+                    metadata = json.loads(activity_row['metadata']) if isinstance(activity_row['metadata'], str) else activity_row['metadata']
+                except:
+                    metadata = activity_row.get('metadata')
             
             return UserActivityResponse(
-                id=activity_id,
-                user_id=activity_node.get('user_id'),
-                session_id=activity_node.get('session_id'),
-                activity_type=activity_node.get('activity_type'),
-                page_url=activity_node.get('page_url'),
-                section_id=activity_node.get('section_id'),
-                section_title=activity_node.get('section_title'),
-                duration_seconds=activity_node.get('duration_seconds'),
-                metadata=activity_node.get('metadata'),
-                timestamp=activity_node.get('timestamp')
+                id=str(activity_row['id']),
+                user_id=activity_row.get('user_id'),
+                session_id=activity_row.get('session_id'),
+                activity_type=activity_row.get('activity_type'),
+                page_url=activity_row.get('page_url'),
+                section_id=activity_row.get('section_id'),
+                section_title=activity_row.get('section_title'),
+                duration_seconds=activity_row.get('duration_seconds'),
+                metadata=metadata,
+                timestamp=activity_row.get('timestamp')
             )
         
         return None
     except Exception as e:
-        logger.error(f"Error creating activity: {e}")
-        return None
+        error_msg = str(e)
+        logger.error(f"Error creating activity: {error_msg}")
+        # Check if table doesn't exist
+        if "relation" in error_msg.lower() and "does not exist" in error_msg.lower():
+            logger.error("PostgreSQL 'user_activities' table does not exist. Please run migration script.")
+        # Re-raise exception so caller can handle it
+        raise
 
 def get_activities(
     user_id: Optional[str] = None,
@@ -98,63 +110,71 @@ def get_activities(
     try:
         # Build query with filters
         where_clauses = []
-        params = {"limit": limit, "skip": skip}
+        params = []
         
         if user_id:
-            where_clauses.append("a.user_id = $user_id")
-            params["user_id"] = user_id
+            where_clauses.append("ua.user_id = %s")
+            params.append(user_id)
         
         if session_id:
-            where_clauses.append("a.session_id = $session_id")
-            params["session_id"] = session_id
+            where_clauses.append("ua.session_id = %s")
+            params.append(session_id)
         
         if activity_type:
-            where_clauses.append("a.activity_type = $activity_type")
-            params["activity_type"] = activity_type
+            where_clauses.append("ua.activity_type = %s")
+            params.append(activity_type)
         
         if start_date:
-            where_clauses.append("a.timestamp >= $start_date")
-            params["start_date"] = start_date
+            where_clauses.append("ua.timestamp >= %s")
+            params.append(start_date)
         
         if end_date:
-            where_clauses.append("a.timestamp <= $end_date")
-            params["end_date"] = end_date
+            where_clauses.append("ua.timestamp <= %s")
+            params.append(end_date)
         
-        where_clause = " AND ".join(where_clauses) if where_clauses else "true"
+        where_clause = " AND ".join(where_clauses) if where_clauses else "1=1"
         
         query = f"""
-        MATCH (a:UserActivity)
+        SELECT ua.id, ua.user_id, ua.session_id, ua.activity_type, ua.page_url,
+               ua.section_id, ua.section_title, ua.duration_seconds, ua.metadata,
+               ua.timestamp, 
+               COALESCE(u.email, au.email) as user_email, 
+               COALESCE(u.full_name, au.full_name) as user_name
+        FROM user_activities ua
+        LEFT JOIN users u ON ua.user_id = CAST(u.id AS VARCHAR)
+        LEFT JOIN admin_users au ON ua.user_id = CAST(au.id AS VARCHAR)
         WHERE {where_clause}
-        OPTIONAL MATCH (u:User)
-        WHERE u.email IS NOT NULL AND (elementId(u) = a.user_id OR toString(elementId(u)) = a.user_id)
-        RETURN a, elementId(a) as activity_id, u.email as user_email, u.full_name as user_name
-        ORDER BY a.timestamp DESC
-        SKIP $skip
-        LIMIT $limit
+        ORDER BY ua.timestamp DESC
+        LIMIT %s OFFSET %s
         """
         
-        result = db.execute_query(query, params)
+        params.extend([limit, skip])
+        
+        result = neon_db.execute_query(query, tuple(params))
         
         activities = []
-        for record in result:
-            activity_node = record.get('a', {})
-            activity_id = record.get('activity_id', '')
-            user_email = record.get('user_email')
-            user_name = record.get('user_name')
+        for row in result:
+            # Parse metadata JSON
+            metadata = None
+            if row.get('metadata'):
+                try:
+                    metadata = json.loads(row['metadata']) if isinstance(row['metadata'], str) else row['metadata']
+                except:
+                    metadata = row.get('metadata')
             
             activities.append(UserActivityResponse(
-                id=activity_id,
-                user_id=activity_node.get('user_id'),
-                session_id=activity_node.get('session_id'),
-                activity_type=activity_node.get('activity_type'),
-                page_url=activity_node.get('page_url'),
-                section_id=activity_node.get('section_id'),
-                section_title=activity_node.get('section_title'),
-                duration_seconds=activity_node.get('duration_seconds'),
-                metadata=activity_node.get('metadata'),
-                timestamp=activity_node.get('timestamp'),
-                user_email=user_email,
-                user_name=user_name
+                id=str(row['id']),
+                user_id=row.get('user_id'),
+                session_id=row.get('session_id'),
+                activity_type=row.get('activity_type'),
+                page_url=row.get('page_url'),
+                section_id=row.get('section_id'),
+                section_title=row.get('section_title'),
+                duration_seconds=row.get('duration_seconds'),
+                metadata=metadata,
+                timestamp=row.get('timestamp'),
+                user_email=row.get('user_email'),
+                user_name=row.get('user_name')
             ))
         
         return activities
@@ -177,75 +197,77 @@ def get_activity_statistics(days: int = 7) -> Dict:
         
         # Total activities
         total_query = """
-        MATCH (a:UserActivity)
-        WHERE a.timestamp >= $start_date
-        RETURN count(a) as total
+        SELECT COUNT(*) as total
+        FROM user_activities
+        WHERE timestamp >= %s
         """
         
         # Unique users
         unique_users_query = """
-        MATCH (a:UserActivity)
-        WHERE a.timestamp >= $start_date AND a.user_id IS NOT NULL
-        RETURN count(DISTINCT a.user_id) as unique_users
+        SELECT COUNT(DISTINCT user_id) as unique_users
+        FROM user_activities
+        WHERE timestamp >= %s AND user_id IS NOT NULL
         """
         
         # Unique sessions
         unique_sessions_query = """
-        MATCH (a:UserActivity)
-        WHERE a.timestamp >= $start_date
-        RETURN count(DISTINCT a.session_id) as unique_sessions
+        SELECT COUNT(DISTINCT session_id) as unique_sessions
+        FROM user_activities
+        WHERE timestamp >= %s
         """
         
         # Total duration
         total_duration_query = """
-        MATCH (a:UserActivity)
-        WHERE a.timestamp >= $start_date AND a.duration_seconds IS NOT NULL
-        RETURN sum(a.duration_seconds) as total_duration
+        SELECT COALESCE(SUM(duration_seconds), 0) as total_duration
+        FROM user_activities
+        WHERE timestamp >= %s AND duration_seconds IS NOT NULL
         """
         
         # Activity by type
         by_type_query = """
-        MATCH (a:UserActivity)
-        WHERE a.timestamp >= $start_date
-        RETURN a.activity_type as type, count(a) as count
+        SELECT activity_type as type, COUNT(*) as count
+        FROM user_activities
+        WHERE timestamp >= %s
+        GROUP BY activity_type
         ORDER BY count DESC
         """
         
         # Top sections viewed
         top_sections_query = """
-        MATCH (a:UserActivity)
-        WHERE a.timestamp >= $start_date 
-          AND a.section_title IS NOT NULL 
-          AND a.activity_type IN ['section_view', 'page_view']
-        RETURN a.section_title as section, count(a) as views
+        SELECT section_title as section, COUNT(*) as views
+        FROM user_activities
+        WHERE timestamp >= %s 
+          AND section_title IS NOT NULL 
+          AND activity_type IN ('section_view', 'page_view')
+        GROUP BY section_title
         ORDER BY views DESC
         LIMIT 10
         """
         
         # Activities by day
         by_day_query = """
-        MATCH (a:UserActivity)
-        WHERE a.timestamp >= $start_date
-        WITH date(a.timestamp) as day, count(a) as count
-        RETURN day, count
+        SELECT DATE(timestamp) as day, COUNT(*) as count
+        FROM user_activities
+        WHERE timestamp >= %s
+        GROUP BY DATE(timestamp)
         ORDER BY day ASC
         """
         
-        params = {"start_date": start_date}
+        params = (start_date,)
         
-        total_result = db.execute_query(total_query, params)
-        unique_users_result = db.execute_query(unique_users_query, params)
-        unique_sessions_result = db.execute_query(unique_sessions_query, params)
-        total_duration_result = db.execute_query(total_duration_query, params)
-        by_type_result = db.execute_query(by_type_query, params)
-        top_sections_result = db.execute_query(top_sections_query, params)
-        by_day_result = db.execute_query(by_day_query, params)
+        total_result = neon_db.execute_query(total_query, params)
+        unique_users_result = neon_db.execute_query(unique_users_query, params)
+        unique_sessions_result = neon_db.execute_query(unique_sessions_query, params)
+        total_duration_result = neon_db.execute_query(total_duration_query, params)
+        by_type_result = neon_db.execute_query(by_type_query, params)
+        top_sections_result = neon_db.execute_query(top_sections_query, params)
+        by_day_result = neon_db.execute_query(by_day_query, params)
         
         return {
             "total_activities": total_result[0].get('total', 0) if total_result else 0,
             "unique_users": unique_users_result[0].get('unique_users', 0) if unique_users_result else 0,
             "unique_sessions": unique_sessions_result[0].get('unique_sessions', 0) if unique_sessions_result else 0,
-            "total_duration_seconds": total_duration_result[0].get('total_duration', 0) if total_duration_result else 0,
+            "total_duration_seconds": int(total_duration_result[0].get('total_duration', 0)) if total_duration_result else 0,
             "activities_by_type": [{"type": r.get('type'), "count": r.get('count')} for r in by_type_result],
             "top_sections": [{"section": r.get('section'), "views": r.get('views')} for r in top_sections_result],
             "activities_by_day": [{"date": str(r.get('day')), "count": r.get('count')} for r in by_day_result],
@@ -280,17 +302,17 @@ def get_user_activity_summary(user_id: str, days: int = 30) -> Dict:
         start_date = datetime.utcnow() - timedelta(days=days)
         
         query = """
-        MATCH (a:UserActivity)
-        WHERE a.user_id = $user_id AND a.timestamp >= $start_date
-        WITH a.activity_type as type, 
-             count(a) as count,
-             sum(CASE WHEN a.duration_seconds IS NOT NULL THEN a.duration_seconds ELSE 0 END) as total_duration
-        RETURN type, count, total_duration
+        SELECT activity_type as type, 
+               COUNT(*) as count,
+               COALESCE(SUM(duration_seconds), 0) as total_duration
+        FROM user_activities
+        WHERE user_id = %s AND timestamp >= %s
+        GROUP BY activity_type
         ORDER BY count DESC
         """
         
-        params = {"user_id": user_id, "start_date": start_date}
-        result = db.execute_query(query, params)
+        params = (user_id, start_date)
+        result = neon_db.execute_query(query, params)
         
         return {
             "user_id": user_id,
@@ -299,7 +321,7 @@ def get_user_activity_summary(user_id: str, days: int = 30) -> Dict:
                 {
                     "type": r.get('type'),
                     "count": r.get('count'),
-                    "total_duration_seconds": r.get('total_duration', 0)
+                    "total_duration_seconds": int(r.get('total_duration', 0))
                 }
                 for r in result
             ]

@@ -71,6 +71,7 @@ class NeonDatabase:
         """
         Execute a query and return results as list of dicts.
         Includes retry logic for connection failures.
+        Works for both read and write operations (autocommit is enabled).
         """
         max_retries = 3
         last_error = None
@@ -103,6 +104,13 @@ class NeonDatabase:
         error_msg = f"Query execution failed after {max_retries} attempts: {last_error}"
         logger.error(error_msg)
         raise Exception(error_msg)
+    
+    def execute_write_query(self, query, parameters=None):
+        """
+        Execute a write query (INSERT, UPDATE, DELETE).
+        Alias for execute_query since autocommit is enabled.
+        """
+        return self.execute_query(query, parameters)
 
     def close(self):
         """Close database connection"""

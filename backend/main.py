@@ -2,18 +2,23 @@
 import platform_fix
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional, List
 import time
 import logging
+import os
+import aiofiles
 from config import Config
 from services import get_all_stories, get_graph_data, get_graph_data_by_section_and_country, search_with_ai, get_story_statistics, get_all_node_types, get_calendar_data, get_cluster_data, get_entity_wikidata, search_entity_wikidata
-from models import GraphData, UserCreate, UserLogin, Token, UserResponse, GoogleAuthRequest, UserActivityCreate, UserActivityResponse, AdminLoginRequest
+from models import GraphData, UserCreate, UserLogin, Token, UserResponse, GoogleAuthRequest, UserActivityCreate, UserActivityResponse, AdminLoginRequest, SubmissionCreate, SubmissionResponse, UserSubscriptionResponse, SubmissionUpdateRequest
 from pydantic import BaseModel
 from auth import create_access_token, verify_google_token, get_current_user, get_current_admin_user
-from user_service import create_user, authenticate_user, get_user_by_email, create_or_update_google_user, get_user_by_id
+from user_service import create_user, authenticate_user, get_user_by_email, create_or_update_google_user, get_user_by_id, get_all_users
 from activity_service import create_activity, get_activities, get_activity_statistics, get_user_activity_summary
+from submission_service import create_submission, process_submission, get_submission, get_user_submissions, get_all_submissions
+from subscription_service import get_user_subscription, update_user_subscription, get_subscription_plan, SUBSCRIPTION_PLANS
+from rate_limit_service import check_rate_limit, record_request
 from datetime import timedelta, datetime
 
 # Configure logging
@@ -127,7 +132,21 @@ async def register_user(user_data: UserCreate):
             )
         
         # Create new user
-        new_user = create_user(user_data, auth_provider="local")
+        try:
+            new_user = create_user(user_data, auth_provider="local")
+        except ValueError as e:
+            # User already exists or validation error
+            raise HTTPException(
+                status_code=400,
+                detail=str(e)
+            )
+        except RuntimeError as e:
+            # Database not initialized
+            logger.error(f"Database initialization error: {e}")
+            raise HTTPException(
+                status_code=500,
+                detail="Database not initialized. Please contact administrator."
+            )
         
         if not new_user:
             raise HTTPException(
@@ -169,7 +188,19 @@ async def login_user(user_credentials: UserLogin):
     """
     try:
         # Authenticate user
-        user = authenticate_user(user_credentials.email, user_credentials.password)
+        try:
+            user = authenticate_user(user_credentials.email, user_credentials.password)
+        except Exception as e:
+            error_msg = str(e)
+            # Check if it's a database table issue
+            if "relation" in error_msg.lower() and "does not exist" in error_msg.lower():
+                logger.error("Database tables not initialized")
+                raise HTTPException(
+                    status_code=500,
+                    detail="Database not initialized. Please contact administrator."
+                )
+            # Re-raise other exceptions
+            raise
         
         if not user:
             raise HTTPException(
@@ -318,10 +349,14 @@ async def get_current_user_info(current_user: dict = Depends(get_current_user)):
 async def admin_login(credentials: AdminLoginRequest):
     """
     Admin login with additional verification
+    Uses PostgreSQL (Neon) for admin user authentication
     """
     try:
-        # Authenticate user
-        user = authenticate_user(credentials.email, credentials.password)
+        # Import admin user service (PostgreSQL)
+        from admin_user_service import authenticate_admin_user
+        
+        # Authenticate admin user from PostgreSQL
+        user = authenticate_admin_user(credentials.email, credentials.password)
         
         if not user:
             raise HTTPException(
@@ -385,7 +420,19 @@ async def track_activity(activity: UserActivityCreate):
     Can be called by authenticated or anonymous users
     """
     try:
-        result = create_activity(activity)
+        try:
+            result = create_activity(activity)
+        except Exception as e:
+            error_msg = str(e)
+            # Check if table doesn't exist
+            if "relation" in error_msg.lower() and "does not exist" in error_msg.lower():
+                logger.error("Database tables not initialized")
+                raise HTTPException(
+                    status_code=500,
+                    detail="Database not initialized. Please contact administrator."
+                )
+            # Re-raise other exceptions
+            raise
         
         if not result:
             raise HTTPException(
@@ -474,6 +521,231 @@ async def get_user_activity(
             status_code=500,
             detail=f"Failed to fetch user activity: {str(e)}"
         )
+
+# ============== Submission Endpoints ==============
+
+@app.post("/api/submissions", response_model=SubmissionResponse)
+async def create_submission_endpoint(
+    submission_type: str = Form(...),
+    input_data: Optional[str] = Form(None),
+    input_url: Optional[str] = Form(None),
+    tags: Optional[str] = Form(None),  # JSON string array
+    file: Optional[UploadFile] = File(None),
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Create a new submission (URL, text, or PDF)
+    Requires authentication and rate limit check
+    """
+    try:
+        user_id = current_user['id']
+        
+        # Check rate limit
+        allowed, error_msg = check_rate_limit(user_id)
+        if not allowed:
+            raise HTTPException(status_code=429, detail=error_msg)
+        
+        # Validate submission type
+        if submission_type not in ['url', 'text', 'pdf']:
+            raise HTTPException(status_code=400, detail="Invalid submission_type. Must be 'url', 'text', or 'pdf'")
+        
+        # Handle PDF upload
+        file_path = None
+        file_name = None
+        file_size = None
+        
+        if submission_type == 'pdf':
+            if not file:
+                raise HTTPException(status_code=400, detail="PDF file is required for PDF submissions")
+            
+            # Validate file type
+            if not file.filename.endswith('.pdf'):
+                raise HTTPException(status_code=400, detail="Only PDF files are allowed")
+            
+            # Save file
+            upload_dir = os.path.join(os.path.dirname(__file__), "uploads")
+            os.makedirs(upload_dir, exist_ok=True)
+            
+            file_name = file.filename
+            file_path = os.path.join(upload_dir, f"{user_id}_{int(time.time())}_{file_name}")
+            
+            async with aiofiles.open(file_path, 'wb') as f:
+                content = await file.read()
+                file_size = len(content)
+                await f.write(content)
+        
+        elif submission_type == 'url':
+            if not input_url:
+                raise HTTPException(status_code=400, detail="input_url is required for URL submissions")
+        
+        elif submission_type == 'text':
+            if not input_data:
+                raise HTTPException(status_code=400, detail="input_data is required for text submissions")
+        
+        # Parse tags
+        tags_list = []
+        if tags:
+            try:
+                import json
+                tags_list = json.loads(tags)
+            except:
+                tags_list = []
+        
+        # Create submission
+        submission_data = SubmissionCreate(
+            submission_type=submission_type,
+            input_data=input_data,
+            input_url=input_url,
+            tags=tags_list
+        )
+        
+        submission = create_submission(user_id, submission_data, file_path, file_name, file_size)
+        
+        if not submission:
+            raise HTTPException(status_code=500, detail="Failed to create submission")
+        
+        # Record request for rate limiting
+        record_request(user_id, int(submission.id), "submission")
+        
+        # Process submission asynchronously (in production, use a task queue)
+        # For now, process synchronously
+        try:
+            processed_submission = process_submission(submission.id)
+            if processed_submission:
+                return processed_submission
+        except Exception as e:
+            logger.error(f"Error processing submission: {e}")
+            # Return submission even if processing fails
+            pass
+        
+        return submission
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Error creating submission: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to create submission: {str(e)}")
+
+@app.get("/api/submissions/{submission_id}", response_model=SubmissionResponse)
+async def get_submission_endpoint(
+    submission_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get a submission by ID"""
+    try:
+        submission = get_submission(submission_id)
+        if not submission:
+            raise HTTPException(status_code=404, detail="Submission not found")
+        
+        # Check if user owns this submission or is admin
+        if submission.user_id != current_user['id'] and not current_user.get('is_admin'):
+            raise HTTPException(status_code=403, detail="Access denied")
+        
+        return submission
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Error getting submission: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get submission: {str(e)}")
+
+@app.get("/api/submissions", response_model=List[SubmissionResponse])
+async def get_user_submissions_endpoint(
+    limit: int = 50,
+    offset: int = 0,
+    current_user: dict = Depends(get_current_user)
+):
+    """Get all submissions for the current user"""
+    try:
+        submissions = get_user_submissions(current_user['id'], limit, offset)
+        return submissions
+    except Exception as e:
+        logger.exception(f"Error getting user submissions: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get submissions: {str(e)}")
+
+@app.get("/api/subscription", response_model=UserSubscriptionResponse)
+async def get_user_subscription_endpoint(
+    current_user: dict = Depends(get_current_user)
+):
+    """Get current user's subscription details"""
+    try:
+        subscription = get_user_subscription(current_user['id'])
+        if not subscription:
+            raise HTTPException(status_code=404, detail="Subscription not found")
+        return subscription
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Error getting subscription: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get subscription: {str(e)}")
+
+# ============== Admin Submission Endpoints ==============
+
+@app.get("/api/admin/submissions")
+async def get_admin_submissions(
+    limit: int = 100,
+    offset: int = 0,
+    current_user: dict = Depends(get_current_admin_user)
+):
+    """Get all submissions (Admin only)"""
+    try:
+        submissions = get_all_submissions(limit, offset)
+        return submissions
+    except Exception as e:
+        logger.exception(f"Error getting all submissions: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get submissions: {str(e)}")
+
+@app.put("/api/admin/users/{user_id}/subscription")
+async def update_user_subscription_endpoint(
+    user_id: str,
+    update_data: SubmissionUpdateRequest,
+    current_user: dict = Depends(get_current_admin_user)
+):
+    """Update user subscription (Admin only)"""
+    try:
+        if update_data.subscription_tier:
+            plan = get_subscription_plan(update_data.subscription_tier)
+            if not plan:
+                raise HTTPException(status_code=400, detail=f"Invalid subscription tier: {update_data.subscription_tier}")
+        
+        if not update_data.subscription_tier:
+            raise HTTPException(status_code=400, detail="subscription_tier is required")
+        
+        status = update_data.subscription_status or "active"
+        success = update_user_subscription(user_id, update_data.subscription_tier, status)
+        
+        if not success:
+            raise HTTPException(status_code=404, detail="User not found")
+        
+        return {"message": "Subscription updated successfully"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Error updating subscription: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to update subscription: {str(e)}")
+
+@app.get("/api/admin/subscription-plans")
+async def get_subscription_plans_endpoint(
+    current_user: dict = Depends(get_current_admin_user)
+):
+    """Get all available subscription plans (Admin only)"""
+    try:
+        return list(SUBSCRIPTION_PLANS.values())
+    except Exception as e:
+        logger.exception(f"Error getting subscription plans: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get subscription plans: {str(e)}")
+
+@app.get("/api/admin/users")
+async def get_all_users_endpoint(
+    limit: int = 100,
+    offset: int = 0,
+    current_user: dict = Depends(get_current_admin_user)
+):
+    """Get all users (Admin only)"""
+    try:
+        users = get_all_users(limit, offset)
+        return users
+    except Exception as e:
+        logger.exception(f"Error getting users: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to get users: {str(e)}")
 
 @app.get("/api/admin/dashboard")
 async def get_admin_dashboard(
