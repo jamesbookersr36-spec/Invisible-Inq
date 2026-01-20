@@ -2983,21 +2983,26 @@ const HomePage = () => {
                 <div className="flex rounded-sm border border-[#707070] bg-[#09090B] p-0.5 gap-0.5">
                   <button
                     onClick={() => {
-                      setViewMode('Graph');
-                      setSelectedSceneContainer(null);
-                      updateURL({ view: 'Graph', scene: null });
-                      // Clear all selections when graph is redrawn
-                      setSelectedNodes(new Set());
-                      setSelectedEdges(new Set());
-                      selectNode(null);
-                      selectEdge(null);
-                      // Toggle between tree and force layout
-                      const newLayout = graphLayoutMode === 'force' ? 'tree' : 'force';
-                      setGraphLayoutMode(newLayout);
-                      // Zoom to fit after layout change
-                      setTimeout(() => {
-                        setZoomAction('fit');
-                      }, 100);
+                      // If already in Graph view, toggle layout mode
+                      if (viewMode === 'Graph' && !selectedSceneContainer) {
+                        // Toggle between tree and force layout
+                        const newLayout = graphLayoutMode === 'force' ? 'tree' : 'force';
+                        setGraphLayoutMode(newLayout);
+                        // Zoom to fit after layout change
+                        setTimeout(() => {
+                          setZoomAction('fit');
+                        }, 100);
+                      } else {
+                        // Switch to Graph view from other views
+                        setViewMode('Graph');
+                        setSelectedSceneContainer(null);
+                        updateURL({ view: 'Graph', scene: null });
+                        // Clear all selections when switching views
+                        setSelectedNodes(new Set());
+                        setSelectedEdges(new Set());
+                        selectNode(null);
+                        selectEdge(null);
+                      }
                     }}
                     className={`w-5 h-5 rounded-[2px] transition-colors flex items-center justify-center ${
                       viewMode === 'Graph' && !selectedSceneContainer
