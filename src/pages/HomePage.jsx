@@ -1285,7 +1285,9 @@ const HomePage = () => {
         setSelectedSceneContainer(null);
       }
     }
-  }, [location.search, selectStory, selectChapter, selectSubstory, currentStoryId, currentChapterId, currentSubstoryId, currentStory, currentChapter, currentSubstory, stories, viewMode, selectedSceneContainer, findTitleByNormalized, normalizeTitleForURL]);
+  }, [location.search, selectStory, selectChapter, selectSubstory, currentStoryId, currentChapterId, currentSubstoryId, currentStory, currentChapter, currentSubstory, stories, findTitleByNormalized, normalizeTitleForURL]);
+  // Note: viewMode and selectedSceneContainer removed from deps to prevent race conditions
+  // This effect should only run when the URL changes, not when view state changes
 
   // Note: URL updates are now handled directly in the handlers (handleStorySelect, handleChapterSelect, handleSubstorySelect)
   // This useEffect is removed to prevent conflicts and race conditions
@@ -1398,11 +1400,12 @@ const HomePage = () => {
     }
   };
 
-  useEffect(() => {
-    if (graphData.nodes.length > 0) {
-      setViewMode('Graph');
-    }
-  }, [graphData]);
+  // REMOVED: This useEffect was forcing Graph view when data loads, interfering with user's view selection
+  // useEffect(() => {
+  //   if (graphData.nodes.length > 0) {
+  //     setViewMode('Graph');
+  //   }
+  // }, [graphData]);
 
   // Reset graph layout mode to 'force' when graph is redrawn with new data
   useEffect(() => {
