@@ -72,9 +72,11 @@ const GraphViewByMap = ({ mapView = 'flat', graphData = { nodes: [], links: [] }
       return;
     }
 
-    const countryNodes = graphData.nodes.filter(node => 
-      node.node_type === 'Country' || node.type === 'Country'
-    );
+    // Make case-insensitive check for country nodes
+    const countryNodes = graphData.nodes.filter(node => {
+      const nodeType = node.node_type || node.type;
+      return nodeType && String(nodeType).toLowerCase() === 'country';
+    });
 
     if (countryNodes.length === 0) {
       setHighlightedCountries([]);
@@ -134,9 +136,11 @@ const GraphViewByMap = ({ mapView = 'flat', graphData = { nodes: [], links: [] }
       return;
     }
 
-    const countryNodes = graphData.nodes.filter(node => 
-      node.node_type === 'Country' || node.type === 'Country'
-    );
+    // Make case-insensitive check for country nodes
+    const countryNodes = graphData.nodes.filter(node => {
+      const nodeType = node.node_type || node.type;
+      return nodeType && String(nodeType).toLowerCase() === 'country';
+    });
 
     countryDataMap.current.clear();
     countryNodes.forEach(node => {
@@ -349,7 +353,9 @@ const GraphViewByMap = ({ mapView = 'flat', graphData = { nodes: [], links: [] }
               
               const normalizedMapName = normalizeCountryName(mapCountryName);
               const countryNode = graphData.nodes.find(node => {
-                if (node.node_type !== 'Country' && node.type !== 'Country') return false;
+                // Make case-insensitive check for country nodes
+                const nodeType = node.node_type || node.type;
+                if (!nodeType || String(nodeType).toLowerCase() !== 'country') return false;
                 const nodeCountryName = node.country_name || node.name || node['Country Name'] || '';
                 const normalizedNodeName = normalizeCountryName(nodeCountryName);
                 return normalizedNodeName === normalizedMapName || 
@@ -566,7 +572,9 @@ const GraphViewByMap = ({ mapView = 'flat', graphData = { nodes: [], links: [] }
 
     const selectedCountryNormalized = normalizeCountryName(selectedCountryName);
     const matchingCountryNode = countryGraphData.nodes.find(node => {
-      if (node.node_type !== 'Country' && node.type !== 'Country') return false;
+      // Make case-insensitive check for country nodes
+      const nodeType = node.node_type || node.type;
+      if (!nodeType || String(nodeType).toLowerCase() !== 'country') return false;
       const nodeCountryName = node.country_name || node.name || node['Country Name'] || '';
       const normalizedNodeName = normalizeCountryName(nodeCountryName);
       return normalizedNodeName === selectedCountryNormalized || 
