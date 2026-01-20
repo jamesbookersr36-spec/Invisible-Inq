@@ -134,21 +134,33 @@ def get_graph_data_by_section_query(section_gid: Optional[str] = None, section_q
     
     query = f"""
     {match_clause}
-    WITH section, toString(section.gr_id) AS gr_id
+    // Resolve the graph membership key for this Section.
+    // Primary: section.gr_id. Fallback: section.gid (some datasets reuse gid as the graph id).
+    WITH section, coalesce(toString(section.gr_id), toString(section.gid)) AS graph_gr_id
 
-    // Collect all nodes in this section by gr_id (exclude story/chapter/section hierarchy nodes)
+    // Collect all nodes in this section's graph.
+    // Primary membership: node.gr_id == graph_gr_id.
+    // Fallbacks: node.section / node.sections may be used by some loaders.
     MATCH (node)
-    WHERE toString(node.gr_id) = gr_id
+    WHERE (
+      toString(node.gr_id) = graph_gr_id
+      OR toString(node.section) = graph_gr_id
+      OR toString(node.section) = toString(section.gid)
+      OR toString(section.gid) IN coalesce(node.sections, [])
+    )
       AND NONE(l IN labels(node) WHERE toLower(l) IN ['story','chapter','section'])
-    WITH section, gr_id, COLLECT(DISTINCT node) AS all_nodes
+    WITH section, graph_gr_id, COLLECT(DISTINCT node) AS all_nodes
 
-    // Collect all relationships fully inside this section (by endpoints' gr_id)
+    // Collect relationships fully inside this section's graph.
+    // Prefer endpoint membership (more reliable); allow rel.gr_id match as an additional inclusion signal.
     MATCH (a)-[rel]-(b)
-    WHERE toString(a.gr_id) = gr_id
-      AND toString(b.gr_id) = gr_id
+    WHERE (
+      (toString(a.gr_id) = graph_gr_id AND toString(b.gr_id) = graph_gr_id)
+      OR toString(rel.gr_id) = graph_gr_id
+    )
       AND NONE(l IN labels(a) WHERE toLower(l) IN ['story','chapter','section'])
       AND NONE(l IN labels(b) WHERE toLower(l) IN ['story','chapter','section'])
-    WITH section, all_nodes,
+    WITH all_nodes,
          COLLECT(DISTINCT {{
            rel: rel,
            from: a,
@@ -172,9 +184,9 @@ def get_graph_data_by_section_query(section_gid: Optional[str] = None, section_q
         from_labels: labels(rd.from),
         to_labels: labels(rd.to),
         // Common fields consumed by the frontend
-        relationship_summary: coalesce(rd.rel.summary, rd.rel.`Relationship Summary`, rd.rel.name, rd.rel.text),
-        article_title: coalesce(rd.rel.title, rd.rel.`Article Title`),
-        article_url: coalesce(rd.rel.url, rd.rel.`Article URL`, rd.rel.`article URL`),
+        relationship_summary: coalesce(rd.rel.summary, rd.rel.`Relationship Summary`, rd.rel.`Relationship Summary_new`, rd.rel.name, rd.rel.text),
+        article_title: coalesce(rd.rel.title, rd.rel.`Article Title`, rd.rel.`Source Title`),
+        article_url: coalesce(rd.rel.url, rd.rel.`Article URL`, rd.rel.`article URL`, rd.rel.`Source URL`),
         relationship_date: coalesce(rd.rel.date, rd.rel.`Date`, rd.rel.`Relationship Date`),
         properties: rd.rel {{ .* }}
       }}]

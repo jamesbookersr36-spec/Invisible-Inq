@@ -855,8 +855,8 @@ const HomePage = () => {
         });
 
         if (otherNode) {
-          const nodeType = otherNode.node_type || otherNode.type;
-          const isCountry = nodeType === 'Country';
+          const nodeType = String(otherNode.node_type || otherNode.type || '').toLowerCase();
+          const isCountry = nodeType === 'country';
           const countryId = otherNode.id || otherNode.gid;
 
           if (isCountry && countryId && !processedCountryIds.has(countryId)) {
@@ -869,8 +869,8 @@ const HomePage = () => {
 
     // Also check if any section nodes are country nodes themselves
     sectionNodes.forEach(node => {
-      const nodeType = node.node_type || node.type;
-      if (nodeType === 'Country') {
+      const nodeType = String(node.node_type || node.type || '').toLowerCase();
+      if (nodeType === 'country') {
         const countryId = node.id || node.gid;
         if (countryId && !processedCountryIds.has(countryId)) {
           connectedCountryNodes.push(node);

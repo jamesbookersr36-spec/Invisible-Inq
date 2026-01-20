@@ -753,8 +753,8 @@ const GraphViewByMap = ({ mapView = 'flat', graphData = { nodes: [], links: [] }
         }
         // Highlight node on hover (but keep country node at 2px, Entity nodes have different styling)
         const isMatchingCountry = matchingCountryNode && (d.id === matchingCountryNode.id || d.gid === matchingCountryNode.gid);
-        const nodeType = d.node_type || d.type || 'Entity';
-        const isEntity = nodeType === 'Entity';
+        const nodeType = String(d.node_type || d.type || 'entity').toLowerCase();
+        const isEntity = nodeType === 'entity';
         if (!isMatchingCountry && !isEntity) {
           d3.select(this).select('circle')
             .attr('stroke-width', 3.5)
@@ -767,8 +767,8 @@ const GraphViewByMap = ({ mapView = 'flat', graphData = { nodes: [], links: [] }
         setGraphTooltip(null);
         // Restore original node style (country node stays at 2px, Entity nodes have different styling)
         const isMatchingCountry = matchingCountryNode && (d.id === matchingCountryNode.id || d.gid === matchingCountryNode.gid);
-        const nodeType = d.node_type || d.type || 'Entity';
-        const isEntity = nodeType === 'Entity';
+        const nodeType = String(d.node_type || d.type || 'entity').toLowerCase();
+        const isEntity = nodeType === 'entity';
         if (!isMatchingCountry && !isEntity) {
           d3.select(this).select('circle')
             .attr('stroke-width', 2.5)
@@ -842,8 +842,8 @@ const GraphViewByMap = ({ mapView = 'flat', graphData = { nodes: [], links: [] }
     const nodeShapes = node.each(function(d) {
       const nodeGroup = d3.select(this);
       const isMatchingCountry = matchingCountryNode && (d.id === matchingCountryNode.id || d.gid === matchingCountryNode.gid);
-      const nodeType = d.node_type || d.type || 'Entity';
-      const isEntity = nodeType === 'Entity';
+      const nodeType = String(d.node_type || d.type || 'entity').toLowerCase();
+      const isEntity = nodeType === 'entity';
       
       if (isMatchingCountry) {
         // Country node: render as 2px circle

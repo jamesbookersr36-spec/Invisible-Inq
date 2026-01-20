@@ -34,7 +34,14 @@ def format_node(node_data: Dict[str, Any]) -> Dict[str, Any]:
     raw_node_type = node_data.get("node_type") or node_data.get("type")
     if not raw_node_type and isinstance(node_data.get("labels"), list) and node_data.get("labels"):
         raw_node_type = node_data["labels"][0]
-    node_type = str(raw_node_type) if raw_node_type is not None else ""
+
+    def normalize_label(label: str) -> str:
+        # Normalize labels to match frontend filtering/grouping conventions
+        # e.g. "USAID Program Region" -> "usaid_program_region"
+        return str(label).strip().lower().replace(" ", "_")
+
+    node_type_raw = str(raw_node_type) if raw_node_type is not None else ""
+    node_type = normalize_label(node_type_raw) if node_type_raw else ""
 
     name_val = (
         node_data.get("name")
@@ -50,7 +57,7 @@ def format_node(node_data: Dict[str, Any]) -> Dict[str, Any]:
         "id": node_id,
         "gid": gid_value,
         "elementId": element_id,
-        # Keep node_type stable for frontend grouping (new DB uses lowercase labels)
+        # Keep node_type stable for frontend grouping/filtering
         "node_type": node_type,
         "name": str(name_val) if name_val is not None else node_id,
         "section": node_data.get("section"),
