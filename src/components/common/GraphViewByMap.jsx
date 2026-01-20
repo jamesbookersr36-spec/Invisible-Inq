@@ -3,6 +3,7 @@ import * as d3 from 'd3';
 import * as topojson from 'topojson-client';
 import { formatGraphData } from '../../utils/dataUtils';
 import { getNodeTypeColor } from '../../utils/colorUtils';
+import Loader from './Loader';
 
 const GraphViewByMap = ({ mapView = 'flat', graphData = { nodes: [], links: [] }, currentSubstoryId = null, currentSubstory = null }) => {
   const containerRef = useRef(null);

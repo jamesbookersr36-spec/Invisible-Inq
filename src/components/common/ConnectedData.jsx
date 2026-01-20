@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
 import StringConstants from '../StringConstants';
+import Loader from './Loader';
 
 // Mockup data matching the exact relationships from the image
 // Structure: 7 entities in SRC (left), 4 entities in TRG (right), 3 funding entities, 4 actions
