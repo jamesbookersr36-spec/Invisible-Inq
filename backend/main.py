@@ -1257,8 +1257,8 @@ async def create_node(node_request: CreateNodeRequest):
         category = node_request.category.strip()
         properties = node_request.properties or {}
 
-        # If a section_gid was provided, resolve the Section key (Section Name) and attach it to the new node.
-        # New DB: nodes are associated to sections by matching node.section / node.sections to the Section node's name/key.
+        # If a section_gid was provided, resolve the section's `graph name` and assign it to node's gr_id.
+        # New DB: Cross-property matching - section.`graph name` matches node.gr_id
         section_gid = (node_request.section_gid or "").strip() if node_request.section_gid else None
         if section_gid:
             try:
@@ -1266,23 +1266,17 @@ async def create_node(node_request: CreateNodeRequest):
                     """
                     MATCH (s:section)
                     WHERE toString(s.gid) = toString($gid)
-                    RETURN
-                      trim(coalesce(s.`Section Name`, s.`graph name`, toString(s.gid))) AS section_key,
-                      s.gr_id AS gr_id
+                    RETURN s.`graph name` AS graph_name
                     LIMIT 1
                     """,
                     {"gid": section_gid},
                 )
-                if section_lookup and section_lookup[0].get("section_key"):
-                    section_key = section_lookup[0].get("section_key")
-                    # Primary membership fields
-                    properties.setdefault("section", section_key)
-                    properties.setdefault("sections", [section_key])
-                    # Keep gr_id if present for legacy/debugging, but do NOT rely on it for matching.
-                    if section_lookup[0].get("gr_id") is not None:
-                        properties.setdefault("gr_id", section_lookup[0].get("gr_id"))
+                if section_lookup and section_lookup[0].get("graph_name") is not None:
+                    graph_name = section_lookup[0].get("graph_name")
+                    # Primary membership field - node.gr_id = section.`graph name`
+                    properties.setdefault("gr_id", graph_name)
             except Exception as e:
-                logger.warning(f"[BACKEND] Could not resolve section key for section_gid={section_gid}: {e}")
+                logger.warning(f"[BACKEND] Could not resolve section `graph name` for section_gid={section_gid}: {e}")
 
         # Ensure every created node has a stable gid (new DB relies on gid heavily)
         if "gid" not in properties or properties.get("gid") in [None, ""]:
