@@ -1676,21 +1676,12 @@ const HomePage = () => {
       return { nodes: [], links: [] };
     }
 
-    // If a section is selected, filter by section_query first
-    let nodesToFilter = graphData.nodes;
-    const sectionQuery = currentSubstory?.section_query || null;
+    // REMOVED: Section filtering - backend already handles this correctly via gr_id matching
+    // The backend filters nodes where node.gr_id == section.graph_name
+    // No need for redundant frontend filtering that was eliminating all nodes
     
-    if (sectionQuery) {
-      nodesToFilter = graphData.nodes.filter(node => {
-        const nodeSection = node.section || node.section_query;
-        return nodeSection === sectionQuery || 
-               (typeof nodeSection === 'string' && nodeSection.includes(sectionQuery)) ||
-               (typeof sectionQuery === 'string' && sectionQuery.includes(nodeSection));
-      });
-    }
-
-    // Then, filter nodes based on all active filters
-    let filteredNodes = filterNodes(nodesToFilter);
+    // Apply user-defined filters (hide categories, search, etc.)
+    let filteredNodes = filterNodes(graphData.nodes);
 
     // Create a set of filtered node IDs for quick lookup
     const filteredNodeIds = new Set(filteredNodes.map(node => node.id || node.gid));
@@ -1710,7 +1701,7 @@ const HomePage = () => {
       nodes: filteredNodes,
       links: filteredLinks
     };
-  }, [graphData, filterNodes, currentSubstory?.section_query, hiddenCategories]);
+  }, [graphData, filterNodes, hiddenCategories]);
 
   // Memoize onZoomComplete callback to prevent unnecessary re-renders
   const handleZoomComplete = useCallback(() => {
