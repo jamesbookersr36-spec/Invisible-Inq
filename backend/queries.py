@@ -152,22 +152,11 @@ def get_graph_data_by_section_query(section_gid: Optional[str] = None, section_q
     )
       AND NONE(l IN labels(node) WHERE toLower(l) IN ['story','chapter','section'])
     WITH section_key, COLLECT(DISTINCT node) AS all_nodes
+    WHERE size(all_nodes) > 0
 
-    // Collect relationships fully inside this section (by endpoints' section key)
+    // Collect relationships fully inside this section graph (only between nodes we selected)
     MATCH (a)-[rel]-(b)
-    WITH section_key, a, b, rel,
-         trim(toString(coalesce(a.section, a.`Section`, a.`Section KEY`, a.`Section Key`, a.`Section Name`, ""))) AS a_section_key,
-         trim(toString(coalesce(b.section, b.`Section`, b.`Section KEY`, b.`Section Key`, b.`Section Name`, ""))) AS b_section_key,
-         trim(toString(coalesce(rel.section, rel.`Section`, rel.`Section KEY`, rel.`Section Key`, ""))) AS rel_section_key,
-         [s IN coalesce(a.sections, []) | trim(toString(s))] AS a_sections,
-         [s IN coalesce(b.sections, []) | trim(toString(s))] AS b_sections
-    WHERE (
-      toLower(a_section_key) = toLower(section_key)
-      OR ANY(s IN a_sections WHERE toLower(s) = toLower(section_key))
-      OR toLower(b_section_key) = toLower(section_key)
-      OR ANY(s IN b_sections WHERE toLower(s) = toLower(section_key))
-      OR toLower(rel_section_key) = toLower(section_key)
-    )
+    WHERE a IN all_nodes AND b IN all_nodes
       AND NONE(l IN labels(a) WHERE toLower(l) IN ['story','chapter','section'])
       AND NONE(l IN labels(b) WHERE toLower(l) IN ['story','chapter','section'])
     WITH all_nodes,
@@ -189,8 +178,9 @@ def get_graph_data_by_section_query(section_gid: Optional[str] = None, section_q
         gid: coalesce(toString(rd.rel.gid), elementId(rd.rel)),
         elementId: elementId(rd.rel),
         type: rd.type,
-        from_gid: rd.from.gid,
-        to_gid: rd.to.gid,
+        // Ensure link endpoints match node ids (gid preferred, fallback to elementId)
+        from_gid: coalesce(toString(rd.from.gid), elementId(rd.from)),
+        to_gid: coalesce(toString(rd.to.gid), elementId(rd.to)),
         from_labels: labels(rd.from),
         to_labels: labels(rd.to),
         // Common fields consumed by the frontend
@@ -198,7 +188,7 @@ def get_graph_data_by_section_query(section_gid: Optional[str] = None, section_q
         article_title: coalesce(rd.rel.title, rd.rel.`Article Title`, rd.rel.`Source Title`),
         article_url: coalesce(rd.rel.url, rd.rel.`Article URL`, rd.rel.`article URL`, rd.rel.`Source URL`),
         relationship_date: coalesce(rd.rel.date, rd.rel.`Date`, rd.rel.`Relationship Date`),
-        properties: rd.rel {{ .* }}
+        properties: properties(rd.rel)
       }}]
     }} AS graphData
     """
@@ -358,17 +348,13 @@ def get_graph_data_by_section_and_country_query(section_query: str, country_name
       OR ANY(s IN n_sections WHERE toLower(s) = toLower(section_key))
     )
       AND NONE(l IN labels(n) WHERE toLower(l) IN ['story','chapter','section'])
-    WITH section_key, COLLECT(DISTINCT n.gid) AS node_gids
-    WITH section_key, [gid IN node_gids WHERE gid IS NOT NULL] AS node_gids
-
-    MATCH (node)
-    WHERE node.gid IN node_gids
-      AND NONE(l IN labels(node) WHERE toLower(l) IN ['story','chapter','section'])
-    WITH section_key, COLLECT(DISTINCT node) AS all_nodes, node_gids
+    WITH COLLECT(DISTINCT n) AS all_nodes
+    WHERE size(all_nodes) > 0
 
     MATCH (a)-[rel]-(b)
-    WHERE a.gid IN node_gids
-      AND b.gid IN node_gids
+    WHERE a IN all_nodes AND b IN all_nodes
+      AND NONE(l IN labels(a) WHERE toLower(l) IN ['story','chapter','section'])
+      AND NONE(l IN labels(b) WHERE toLower(l) IN ['story','chapter','section'])
     WITH all_nodes,
          COLLECT(DISTINCT {
            rel: rel,
@@ -388,13 +374,13 @@ def get_graph_data_by_section_and_country_query(section_query: str, country_name
         gid: coalesce(toString(rd.rel.gid), elementId(rd.rel)),
         elementId: elementId(rd.rel),
         type: rd.type,
-        from_gid: rd.from.gid,
-        to_gid: rd.to.gid,
+        from_gid: coalesce(toString(rd.from.gid), elementId(rd.from)),
+        to_gid: coalesce(toString(rd.to.gid), elementId(rd.to)),
         relationship_summary: coalesce(rd.rel.summary, rd.rel.`Relationship Summary`, rd.rel.name, rd.rel.text),
         article_title: coalesce(rd.rel.title, rd.rel.`Article Title`),
         article_url: coalesce(rd.rel.url, rd.rel.`Article URL`, rd.rel.`article URL`),
         relationship_date: coalesce(rd.rel.date, rd.rel.`Date`, rd.rel.`Relationship Date`),
-        properties: rd.rel { .* }
+        properties: properties(rd.rel)
       }]
     } AS graphData
     """
