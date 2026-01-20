@@ -346,7 +346,8 @@ def get_all_stories() -> List[Story]:
                 chapter_title = chapter_data.get("chapter_title", "")
                 chapter_total_nodes = chapter_data.get("total_nodes", 0) or 0
 
-                chapter_id = f"chapter{int(chapter_number)}" if chapter_number is not None else str(chapter_gid)
+                # Use Neo4j gid for stable, globally-unique chapter IDs (titles are used for URL sync).
+                chapter_id = str(chapter_gid)
 
                 substories = []
                 for section_data in chapter_data.get("sections", []):
@@ -357,7 +358,9 @@ def get_all_stories() -> List[Story]:
                     section_title = section_data.get("section_title", "")
                     section_num = section_data.get("section_num", 0)
 
-                    substory_id = f"substory{int(section_num)}" if section_num is not None else str(section_gid)
+                    # Use Neo4j gid for stable, globally-unique section IDs.
+                    # This also allows the frontend to pass a numeric identifier to /api/graph/{substory_id}.
+                    substory_id = str(section_gid)
 
                     substories.append(Substory(
                         id=substory_id,
@@ -564,8 +567,11 @@ def get_cluster_data(
         raise ValueError("property_key is required")
 
     try:
+        # Normalize node_type coming from the UI (db.schema.nodeTypeProperties() returns labels with casing/spaces).
+        node_type_normalized = str(node_type).strip().lower().replace(" ", "_")
+
         query, params = get_cluster_data_query(
-            node_type=str(node_type).strip(),
+            node_type=node_type_normalized,
             property_key=str(property_key).strip(),
             section_query=section_query,
             cluster_limit=int(cluster_limit),
@@ -575,14 +581,14 @@ def get_cluster_data(
         results = db.execute_query(query, params)
         if not results:
             return {
-                "node_type": node_type,
+                "node_type": node_type_normalized,
                 "property_key": property_key,
                 "section_query": section_query,
                 "clusters": []
             }
 
         return results[0].get("clusterData", {
-            "node_type": node_type,
+            "node_type": node_type_normalized,
             "property_key": property_key,
             "section_query": section_query,
             "clusters": []

@@ -1,100 +1,98 @@
 from typing import Optional, Tuple
 
 def get_all_stories_query():
-    """Query to fetch all stories with their chapters and sections, including node counts per chapter"""
+    """Query to fetch all stories with their chapters and sections.
+
+    Updated for the new Neo4j schema:
+    - Nodes: :story, :chapter, :section
+    - Relationships: :story_chapter, :chapter_section
+    """
     return """
-    MATCH (story:Story)
-    OPTIONAL MATCH (story)-[:Story_Chapter]->(chapter:Chapter)
-    OPTIONAL MATCH (chapter)-[:Chapter_Section]->(section:Section)
-    WITH story, chapter, section
-    ORDER BY chapter.`Chapter Number`, section.Section_Num
-    WITH story, chapter,
+    MATCH (story:story)
+    OPTIONAL MATCH (story)-[:story_chapter]-(chapter:chapter)
+    OPTIONAL MATCH (chapter)-[:chapter_section]-(section:section)
+    WITH story, chapter, section,
+         toInteger(coalesce(toFloat(story.`Story Number_new`), toFloat(story.`Story Number`), 0)) AS story_number,
+         toInteger(coalesce(toFloat(chapter.`Chapter Number_new`), toFloat(chapter.`Chapter Number`), 0)) AS chapter_number,
+         toInteger(coalesce(toFloat(section.`Section Number`), 0)) AS section_num
+    ORDER BY story_number, chapter_number, section_num
+    WITH story, story_number, chapter, chapter_number,
          COLLECT(DISTINCT {
              gid: section.gid,
-             section_title: section.Section_Title,
-             section_num: section.Section_Num,
-             section_query: section.section_query,
-             brief: section.brief,
-             chapter_number: section.`Chapter Number`,
-             chapter_title: section.`Chapter Title`
+             section_title: coalesce(section.`Section Name`, section.`graph name`, toString(section.gid)),
+             section_num: section_num,
+             // For the frontend, we keep using a "section_query" field. In the new DB, gid is the most reliable identifier.
+             section_query: toString(section.gid),
+             brief: coalesce(section.summary, section.`Summary`, ""),
+             chapter_number: chapter_number,
+             chapter_title: coalesce(chapter.`Chapter Name`, toString(chapter.gid))
          }) AS sections
-    WITH story,
+    WITH story, story_number,
          COLLECT(DISTINCT {
              gid: chapter.gid,
-             chapter_number: chapter.`Chapter Number`,
-             chapter_title: chapter.`Chapter Title`,
-             sections: sections
+             chapter_number: chapter_number,
+             chapter_title: coalesce(chapter.`Chapter Name`, toString(chapter.gid)),
+             sections: sections,
+             total_nodes: 0
          }) AS chapters_raw
-    WITH story,
+    WITH story, story_number,
          [c IN chapters_raw WHERE c.gid IS NOT NULL | c] AS chapters_filtered
-    WITH story,
+    WITH story, story_number,
          [c IN chapters_filtered | {
              gid: c.gid,
              chapter_number: c.chapter_number,
              chapter_title: c.chapter_title,
-             sections: [s IN c.sections WHERE s.gid IS NOT NULL | s]
+             sections: [s IN c.sections WHERE s.gid IS NOT NULL | s],
+             total_nodes: c.total_nodes
          }] AS chapters
-    // Calculate node counts per chapter
-    UNWIND chapters AS chapter_data
-    WITH story, chapter_data,
-         [s IN chapter_data.sections WHERE s.section_query IS NOT NULL AND s.section_query <> "" | s.section_query] AS section_queries
-    WITH story, chapter_data, section_queries,
-         size(section_queries) AS section_queries_size
-    OPTIONAL MATCH (n)
-    WHERE (n:Entity OR n:Relationship OR n:Amount OR n:Agency OR n:Action OR n:Country OR n:DBA OR n:Description OR n:Location OR n:`Place Of Performance` OR n:Process OR n:Recipient OR n:Region OR n:Result OR n:Purpose OR n:Transaction OR n:`Sub Agency` OR n:`USAID Program Region`)
-      AND section_queries_size > 0
-      AND n.section IN section_queries
-    WITH story, chapter_data, section_queries_size,
-         CASE 
-           WHEN section_queries_size = 0 THEN 0
-           ELSE COUNT(DISTINCT n)
-         END AS chapter_node_count
-    WITH story, COLLECT({
-        gid: chapter_data.gid,
-        chapter_number: chapter_data.chapter_number,
-        chapter_title: chapter_data.chapter_title,
-        sections: chapter_data.sections,
-        total_nodes: chapter_node_count
-    }) AS chapters_with_counts
     RETURN {
-        story_title: story.Story_Title,
+        story_title: coalesce(story.`Story Name`, toString(story.gid)),
         story_gid: story.gid,
-        story_brief: story.brief,
-        chapters: chapters_with_counts
+        story_brief: "",
+        chapters: chapters
     } AS story
-    ORDER BY story.Story_Title
+    ORDER BY story_number, story.gid
     """
 
 def get_story_by_id_query(story_id: str):
-    """Query to fetch a specific story by ID (using Story_Title or gid)"""
+    """Query to fetch a specific story by ID (using Story Name/Number or gid).
+
+    Updated for the new Neo4j schema:
+    - Nodes: :story, :chapter, :section
+    - Relationships: :story_chapter, :chapter_section
+    """
     return """
-    MATCH (story:Story)
-    WHERE story.Story_Title = $story_id
-       OR toString(story.gid) = $story_id
-    OPTIONAL MATCH (story)-[:Story_Chapter]->(chapter:Chapter)
-    OPTIONAL MATCH (chapter)-[:Chapter_Section]->(section:Section)
-    WITH story, chapter,
+    MATCH (story:story)
+    WHERE toString(story.gid) = $story_id
+       OR story.`Story Name` = $story_id
+       OR toString(story.`Story Number`) = $story_id
+       OR toString(story.`Story Number_new`) = $story_id
+    OPTIONAL MATCH (story)-[:story_chapter]-(chapter:chapter)
+    OPTIONAL MATCH (chapter)-[:chapter_section]-(section:section)
+    WITH story, chapter, section,
+         toInteger(coalesce(toFloat(chapter.`Chapter Number_new`), toFloat(chapter.`Chapter Number`), 0)) AS chapter_number,
+         toInteger(coalesce(toFloat(section.`Section Number`), 0)) AS section_num
+    ORDER BY chapter_number, section_num
+    WITH story, chapter, chapter_number,
          COLLECT(DISTINCT {
              gid: section.gid,
-             section_title: section.Section_Title,
-             section_num: section.Section_Num,
-             section_query: section.section_query,
-             brief: section.brief,
-             chapter_number: section.`Chapter Number`,
-             chapter_title: section.`Chapter Title`
+             section_title: coalesce(section.`Section Name`, section.`graph name`, toString(section.gid)),
+             section_num: section_num,
+             section_query: toString(section.gid),
+             brief: coalesce(section.summary, section.`Summary`, "")
          }) AS sections
-    WHERE section.gid IS NOT NULL OR section.gid IS NULL
     WITH story,
          COLLECT(DISTINCT {
              gid: chapter.gid,
-             chapter_number: chapter.`Chapter Number`,
-             chapter_title: chapter.`Chapter Title`,
-             sections: [s IN sections WHERE s.chapter_number = chapter.`Chapter Number` ORDER BY s.section_num]
+             chapter_number: chapter_number,
+             chapter_title: coalesce(chapter.`Chapter Name`, toString(chapter.gid)),
+             sections: [s IN sections WHERE s.gid IS NOT NULL | s],
+             total_nodes: 0
          }) AS chapters
     RETURN {
-        story_title: story.Story_Title,
+        story_title: coalesce(story.`Story Name`, toString(story.gid)),
         story_gid: story.gid,
-        story_brief: story.brief,
+        story_brief: "",
         chapters: [c IN chapters WHERE c.gid IS NOT NULL ORDER BY c.chapter_number]
     } AS story
     """, {"story_id": story_id}
@@ -102,363 +100,84 @@ def get_story_by_id_query(story_id: str):
 def get_graph_data_by_section_query(section_gid: Optional[str] = None, section_query: Optional[str] = None, section_title: Optional[str] = None) -> Tuple[str, dict]:
     """
     Query to fetch graph data (nodes and links) for a section.
-    
-    NODES contain:
-    - All ENTITY nodes whose "section" field matches the "section_query" value of the clicked SECTION
-    - All RELATIONSHIP nodes whose "section" field matches the "section_query" value of the clicked SECTION
-    
-    LINKS contain:
-    - The relationships between the NODES included in the database's Entity_Relationship
+
+    Updated for the new Neo4j schema:
+    - Section identity: `(:section {gid})` → `section.gr_id`
+    - Graph membership: nodes/relationships where `toString(gr_id)` matches the section's `gr_id`
+    - Node labels/types are not hardcoded; we include all nodes except `story/chapter/section`
     """
     
     # Build the match clause based on what parameter was provided
     if section_gid:
-        match_clause = "MATCH (section:Section {gid: $section_gid})"
+        # URL supplies gid as string; compare via toString() for type safety.
+        match_clause = "MATCH (section:section) WHERE toString(section.gid) = toString($section_gid)"
         params = {"section_gid": section_gid}
     elif section_query:
-        match_clause = "MATCH (section:Section {section_query: $section_query})"
+        # Backwards/compat: treat section_query as section.gid (string), or try matching common section name fields.
+        match_clause = """
+        MATCH (section:section)
+        WHERE toString(section.gid) = toString($section_query)
+           OR section.`Section Name` = $section_query
+           OR section.`graph name` = $section_query
+        """
         params = {"section_query": section_query}
     elif section_title:
-        match_clause = "MATCH (section:Section {Section_Title: $section_title})"
+        # New DB uses `Section Name` / `graph name` instead of Section_Title
+        match_clause = """
+        MATCH (section:section)
+        WHERE section.`Section Name` = $section_title
+           OR section.`graph name` = $section_title
+        """
         params = {"section_title": section_title}
     else:
         raise ValueError("At least one of section_gid, section_query, or section_title must be provided")
     
     query = f"""
     {match_clause}
-    WITH section
+    WITH section, toString(section.gr_id) AS gr_id
 
-    // Get all nodes that match this section's section_query
-    // Include Entity, Relationship, Amount, Agency, Action, Country, DBA, Description, Location, Place Of Performance, Process, Recipient, Region, Result, Purpose, Transaction, Sub Agency, USAID Program Region
-    MATCH (n)
-    WHERE (n:Entity OR n:Relationship OR n:Amount OR n:Agency OR n:Action OR n:Country OR n:DBA OR n:Description OR n:Location OR n:`Place Of Performance` OR n:Process OR n:Recipient OR n:Region OR n:Result OR n:Purpose OR n:Transaction OR n:`Sub Agency` OR n:`USAID Program Region`)
-      AND n.section = section.section_query
-
-    // Get all relationships from these nodes to other nodes
-    // Include relationships where target matches any of the node types
-    // and either target's section matches OR source's section matches
-    MATCH (n)-[r]->(m)
-    WHERE (m:Entity OR m:Relationship OR m:Amount OR m:Agency OR m:Action OR m:Country OR m:DBA OR m:Description OR m:Location OR m:`Place Of Performance` OR m:Process OR m:Recipient OR m:Region OR m:Result OR m:Purpose OR m:Transaction OR m:`Sub Agency` OR m:`USAID Program Region`)
-      AND (m.section = section.section_query OR n.section = section.section_query)
-
-    // Collect all unique node gids (both source n and target m nodes)
-    WITH section,
-         COLLECT(DISTINCT n.gid) + COLLECT(DISTINCT m.gid) as all_node_gids_list
-
-    // Remove nulls and get unique gids
-    WITH section,
-         [gid IN all_node_gids_list WHERE gid IS NOT NULL] as all_node_gids
-
-    // Get all nodes by their gids
+    // Collect all nodes in this section by gr_id (exclude story/chapter/section hierarchy nodes)
     MATCH (node)
-    WHERE (node:Entity OR node:Relationship OR node:Amount OR node:Agency OR node:Action OR node:Country OR node:DBA OR node:Description OR node:Location OR node:`Place Of Performance` OR node:Process OR node:Recipient OR node:Region OR node:Result OR node:Purpose OR node:Transaction OR node:`Sub Agency` OR node:`USAID Program Region`)
-      AND node.gid IN all_node_gids
+    WHERE toString(node.gr_id) = gr_id
+      AND NONE(l IN labels(node) WHERE toLower(l) IN ['story','chapter','section'])
+    WITH section, gr_id, COLLECT(DISTINCT node) AS all_nodes
 
-    // Get all relationships again with the collected nodes
-    MATCH (n)
-    WHERE (n:Entity OR n:Relationship OR n:Amount OR n:Agency OR n:Action OR n:Country OR n:DBA OR n:Description OR n:Location OR n:`Place Of Performance` OR n:Process OR n:Recipient OR n:Region OR n:Result OR n:Purpose OR n:Transaction OR n:`Sub Agency` OR n:`USAID Program Region`)
-      AND n.section = section.section_query
-      AND n.gid IN all_node_gids
-
-    MATCH (n)-[r]->(m)
-    WHERE (m:Entity OR m:Relationship OR m:Amount OR m:Agency OR m:Action OR m:Country OR m:DBA OR m:Description OR m:Location OR m:`Place Of Performance` OR m:Process OR m:Recipient OR m:Region OR m:Result OR m:Purpose OR m:Transaction OR m:`Sub Agency` OR m:`USAID Program Region`)
-      AND (m.section = section.section_query OR n.section = section.section_query)
-      AND m.gid IN all_node_gids
-
-    // Collect all nodes and relationships
-    WITH section,
-         COLLECT(DISTINCT node) as all_nodes,
+    // Collect all relationships fully inside this section (by endpoints' gr_id)
+    MATCH (a)-[rel]-(b)
+    WHERE toString(a.gr_id) = gr_id
+      AND toString(b.gr_id) = gr_id
+      AND NONE(l IN labels(a) WHERE toLower(l) IN ['story','chapter','section'])
+      AND NONE(l IN labels(b) WHERE toLower(l) IN ['story','chapter','section'])
+    WITH section, all_nodes,
          COLLECT(DISTINCT {{
-             rel: r,
-             from: n,
-             to: m,
-             type: type(r)
-         }}) as all_rels
+           rel: rel,
+           from: a,
+           to: b,
+           type: type(rel)
+         }}) AS all_rels
 
-    // Format and return
-    // Return different properties based on node type (Entity vs Relationship)
     RETURN {{
-        nodes: [node IN all_nodes |
-            CASE
-                WHEN 'Entity' IN labels(node) THEN {{
-                    gid: node.gid,
-                    node_type: 'Entity',
-                    section: node.section,
-                    entity_name: node.`Entity Name`,
-                    entity_acronym: node.`Entity Acronym`,
-                    relationship_name: node.`Relationship NAME`,
-                    amount: node.Amount,
-                    receiver_name: node.`Receiver Name`,
-                    article_url: node.`article URL`,
-                    degree: node.degree,
-                    purpose: node.Purpose,
-                    url: node.URL,
-                    relationship_summary: node.`Relationship Summary`,
-                    entity_2_name: node.`Entity 2 Name`,
-                    date: node.Date,
-                    action_summary: node.`Action Summary`,
-                    article_url_full: node.`Article URL`,
-                    article_text: node.`Article Text`,
-                    article_title: node.`Article Title`,
-                    distributor_full_name: node.`Distributor Full Name`,
-                    summary: node.Summary,
-                    modifier_entity_name: node.`Modifier Entity Name`,
-                    relationship_date: node.`Relationship Date`,
-                    tag: node.Tag,
-                    action_text: node.`Action Text`
-                }}
-                WHEN 'Relationship' IN labels(node) THEN {{
-                    gid: node.gid,
-                    node_type: 'Relationship',
-                    section: node.section,
-                    relationship_name: node.`Relationship NAME`,
-                    article_text: node.`Article Text`,
-                    article_url: node.`Article URL`,
-                    degree: node.degree,
-                    relationship_date: node.`Relationship Date`,
-                    tag: node.Tag,
-                    relationship_summary: node.`Relationship Summary`
-                }}
-                WHEN 'Amount' IN labels(node) THEN {{
-                    gid: node.gid,
-                    node_type: 'Amount',
-                    section: node.section,
-                    degree: node.degree,
-                    Amount: node.Amount,
-                    `Distributor Full Name`: node.`Distributor Full Name`,
-                    `Receiver Name`: node.`Receiver Name`,
-                    Purpose: node.Purpose,
-                    `Disb Date`: node.`Disb Date`,
-                    `End Date`: node.`End Date`,
-                    `Project Number`: node.`Project Number`,
-                    ID: node.ID,
-                    Summary: node.Summary,
-                    URL: node.URL,
-                    federal_action_obligation: node.federal_action_obligation,
-                    awarding_office_name: node.awarding_office_name,
-                    action_date_fiscal_year: node.action_date_fiscal_year,
-                    primary_place_of_performance_scope: node.primary_place_of_performance_scope,
-                    action_date: node.action_date,
-                    initial_report_date: node.initial_report_date,
-                    last_modified_date: node.last_modified_date,
-                    awarding_agency_name: node.awarding_agency_name,
-                    transaction_description: node.transaction_description,
-                    generated_pragmatic_obligations: node.generated_pragmatic_obligations,
-                    primary_place_of_performance_country_name: node.primary_place_of_performance_country_name,
-                    object_classes_funding_this_award: node.object_classes_funding_this_award,
-                    cfda_title: node.cfda_title,
-                    awarding_sub_agency_name: node.awarding_sub_agency_name,
-                    total_outlayed_amount_for_overall_award: node.total_outlayed_amount_for_overall_award,
-                    period_of_performance_current_end_date: node.period_of_performance_current_end_date,
-                    primary_place_of_performance_city_name: node.primary_place_of_performance_city_name,
-                    usaspending_permalink: node.usaspending_permalink,
-                    prime_award_base_transaction_description: node.prime_award_base_transaction_description,
-                    period_of_performance_start_date: node.period_of_performance_start_date
-                }}
-                WHEN 'Agency' IN labels(node) THEN {{
-                    gid: node.gid,
-                    node_type: 'Agency',
-                    section: node.section,
-                    awarding_agency: node.`Awarding Agency`,
-                    contracting_agency_id: node.`Contracting Agency ID`,
-                    awarding_agency_name: node.awarding_agency_name,
-                    contracting_agency: node.`Contracting Agency`
-                }}
-                WHEN 'Action' IN labels(node) THEN {{
-                    gid: node.gid,
-                    node_type: 'Action',
-                    section: node.section,
-                    action_summary: node.`Action Summary`,
-                    article_url: node.`Article URL`,
-                    article_title: node.`Article Title`,
-                    degree: node.degree,
-                    action_text: node.`Action Text`
-                }}
-                WHEN 'Country' IN labels(node) THEN {{
-                    gid: node.gid,
-                    node_type: 'Country',
-                    section: node.section,
-                    country_name: node.`Country Name`,
-                    degree: node.degree
-                }}
-                WHEN 'DBA' IN labels(node) THEN {{
-                    gid: node.gid,
-                    node_type: 'DBA',
-                    section: node.section,
-                    recipient_name_raw: node.recipient_name_raw,
-                    subawardee_name: node.subawardee_name
-                }}
-                WHEN 'Description' IN labels(node) THEN {{
-                    gid: node.gid,
-                    node_type: 'Description',
-                    section: node.section,
-                    award_id: node.`Award ID`,
-                    title: node.Title,
-                    base_transaction_description: node.`Base Transaction Description`,
-                    program_activities: node.`Program Activities`
-                }}
-                WHEN 'Location' IN labels(node) THEN {{
-                    gid: node.gid,
-                    node_type: 'Location',
-                    section: node.section,
-                    performance_location: node.`Performance Location`
-                }}
-                WHEN 'Place Of Performance' IN labels(node) THEN {{
-                    gid: node.gid,
-                    node_type: 'Place Of Performance',
-                    section: node.section,
-                    primary_place_of_performance_country_name: node.primary_place_of_performance_country_name,
-                    recipient_country_name: node.recipient_country_name,
-                    primary_place_of_performance_city_name: node.primary_place_of_performance_city_name,
-                    primary_place_of_performance_country_code: node.primary_place_of_performance_country_code
-                }}
-                WHEN 'Process' IN labels(node) THEN {{
-                    gid: node.gid,
-                    node_type: 'Process',
-                    section: node.section,
-                    process_date: node.`Process Date`,
-                    article_url: node.`Article URL`,
-                    article_text: node.`Article Text`,
-                    process_category: node.`Process Category`,
-                    process_summary: node.`Process Summary`,
-                    degree: node.degree,
-                    process: node.Process
-                }}
-                WHEN 'Recipient' IN labels(node) THEN {{
-                    gid: node.gid,
-                    node_type: 'Recipient',
-                    section: node.section,
-                    recipient_name: node.`Recipient Name`,
-                    entity_city: node.`Entity City`,
-                    legal_business_name: node.`Legal Business Name`,
-                    entity_zip_code: node.`Entity ZIP Code`,
-                    recipient_name_lower: node.recipient_name
-                }}
-                WHEN 'Region' IN labels(node) THEN {{
-                    gid: node.gid,
-                    node_type: 'Region',
-                    section: node.section,
-                    global_region: node.`Global Region`
-                }}
-                WHEN 'Result' IN labels(node) THEN {{
-                    gid: node.gid,
-                    node_type: 'Result',
-                    section: node.section,
-                    process_date: node.`Process Date`,
-                    article_url: node.`Article URL`,
-                    article_text: node.`Article Text`,
-                    process_result: node.`Process Result`,
-                    process_summary: node.`Process Summary`,
-                    process_target: node.`Process Target`
-                }}
-                WHEN 'Purpose' IN labels(node) THEN {{
-                    gid: node.gid,
-                    node_type: 'Purpose',
-                    section: node.section,
-                    url: node.URL,
-                    usaspending_permalink: node.usaspending_permalink,
-                    naics_description: node.`NAICS Description`,
-                    prime_award_base_transaction_description: node.prime_award_base_transaction_description,
-                    transaction_description: node.transaction_description,
-                    cfda_title: node.cfda_title,
-                    additional_reporting_description: node.`Additional Reporting Description`,
-                    psc_description: node.`PSC Description`,
-                    program_activities_funding_this_award: node.program_activities_funding_this_award,
-                    purpose: node.Purpose
-                }}
-                WHEN 'Transaction' IN labels(node) THEN {{
-                    gid: node.gid,
-                    node_type: 'Transaction',
-                    section: node.section,
-                    url: node.URL,
-                    performance_end_date: node.`Performance End Date`,
-                    action_date: node.`Action Date`,
-                    total_outlayed_for_award: node.`Total Outlayed For Award`,
-                    award_id: node.`Award ID`,
-                    total_obligated: node.`Total Obligated`,
-                    transaction_key: node.`Transaction Key`,
-                    awarding_sub_agency: node.`Awarding Sub-Agency`,
-                    recipient_name: node.`Recipient Name`,
-                    performance_start_date: node.`Performance Start Date`,
-                    doc_class: node.`Doc Class`,
-                    title: node.Title,
-                    fed_action_obligated: node.`Fed Action Obligated`,
-                    base_transaction_description: node.`Base Transaction Description`,
-                    transaction_description: node.`Transaction Description`
-                }}
-                WHEN 'Sub Agency' IN labels(node) THEN {{
-                    gid: node.gid,
-                    node_type: 'Sub Agency',
-                    section: node.section,
-                    awarding_sub_agency: node.`Awarding Sub-Agency`,
-                    awarding_office_name: node.awarding_office_name
-                }}
-                WHEN 'USAID Program Region' IN labels(node) THEN {{
-                    gid: node.gid,
-                    node_type: 'USAID Program Region',
-                    section: node.section,
-                    usaid_region: node.`USAID Region`
-                }}
-                ELSE {{
-                    gid: node.gid,
-                    node_type: labels(node)[0],
-                    section: node.section
-                }}
-            END
-        ],
-        links: [rel_data IN all_rels WHERE rel_data.rel IS NOT NULL | {{
-            gid: id(rel_data.rel),
-            from_gid: rel_data.from.gid,
-            to_gid: rel_data.to.gid,
-            from_name: CASE
-                WHEN 'Entity' IN labels(rel_data.from) THEN rel_data.from.`Entity Name`
-                WHEN 'Relationship' IN labels(rel_data.from) THEN rel_data.from.`Relationship NAME`
-                WHEN 'Country' IN labels(rel_data.from) THEN rel_data.from.`Country Name`
-                WHEN 'Agency' IN labels(rel_data.from) THEN COALESCE(rel_data.from.`Awarding Agency`, rel_data.from.awarding_agency_name, toString(rel_data.from.gid))
-                WHEN 'Recipient' IN labels(rel_data.from) THEN COALESCE(rel_data.from.`Recipient Name`, rel_data.from.recipient_name, toString(rel_data.from.gid))
-                WHEN 'DBA' IN labels(rel_data.from) THEN rel_data.from.recipient_name_raw
-                WHEN 'Description' IN labels(rel_data.from) THEN rel_data.from.Title
-                WHEN 'Location' IN labels(rel_data.from) THEN rel_data.from.`Performance Location`
-                WHEN 'Region' IN labels(rel_data.from) THEN rel_data.from.`Global Region`
-                WHEN 'Process' IN labels(rel_data.from) THEN rel_data.from.Process
-                WHEN 'Action' IN labels(rel_data.from) THEN rel_data.from.`Action Summary`
-                WHEN 'Result' IN labels(rel_data.from) THEN rel_data.from.`Process Result`
-                WHEN 'Amount' IN labels(rel_data.from) THEN rel_data.from.cfda_title
-                WHEN 'Place Of Performance' IN labels(rel_data.from) THEN rel_data.from.primary_place_of_performance_city_name
-                WHEN 'Purpose' IN labels(rel_data.from) THEN rel_data.from.Purpose
-                WHEN 'Transaction' IN labels(rel_data.from) THEN rel_data.from.Title
-                WHEN 'Sub Agency' IN labels(rel_data.from) THEN rel_data.from.`Awarding Sub-Agency`
-                WHEN 'USAID Program Region' IN labels(rel_data.from) THEN rel_data.from.`USAID Region`
-                ELSE toString(rel_data.from.gid)
-            END,
-            to_name: CASE
-                WHEN 'Entity' IN labels(rel_data.to) THEN rel_data.to.`Entity Name`
-                WHEN 'Relationship' IN labels(rel_data.to) THEN rel_data.to.`Relationship NAME`
-                WHEN 'Country' IN labels(rel_data.to) THEN rel_data.to.`Country Name`
-                WHEN 'Agency' IN labels(rel_data.to) THEN COALESCE(rel_data.to.`Awarding Agency`, rel_data.to.awarding_agency_name, toString(rel_data.to.gid))
-                WHEN 'Recipient' IN labels(rel_data.to) THEN COALESCE(rel_data.to.`Recipient Name`, rel_data.to.recipient_name, toString(rel_data.to.gid))
-                WHEN 'DBA' IN labels(rel_data.to) THEN rel_data.to.recipient_name_raw
-                WHEN 'Description' IN labels(rel_data.to) THEN rel_data.to.Title
-                WHEN 'Location' IN labels(rel_data.to) THEN rel_data.to.`Performance Location`
-                WHEN 'Region' IN labels(rel_data.to) THEN rel_data.to.`Global Region`
-                WHEN 'Process' IN labels(rel_data.to) THEN rel_data.to.Process
-                WHEN 'Action' IN labels(rel_data.to) THEN rel_data.to.`Action Summary`
-                WHEN 'Result' IN labels(rel_data.to) THEN rel_data.to.`Process Result`
-                WHEN 'Amount' IN labels(rel_data.to) THEN rel_data.to.transaction_description
-                WHEN 'Place Of Performance' IN labels(rel_data.to) THEN rel_data.to.primary_place_of_performance_city_name
-                WHEN 'Purpose' IN labels(rel_data.to) THEN rel_data.to.Purpose
-                WHEN 'Transaction' IN labels(rel_data.to) THEN rel_data.to.Title
-                WHEN 'Sub Agency' IN labels(rel_data.to) THEN rel_data.to.`Awarding Sub-Agency`
-                WHEN 'USAID Program Region' IN labels(rel_data.to) THEN rel_data.to.`USAID Region`
-                ELSE toString(rel_data.to.gid)
-            END,
-            relationship_summary: rel_data.rel.`Relationship Summary`,
-            article_title: rel_data.rel.`Article Title`,
-            article_url: rel_data.rel.`article URL`,
-            relationship_date: rel_data.rel.`Relationship Date`,
-            relationship_quality: rel_data.rel.`Relationship Quality`,
-            type: rel_data.type
-        }}]
+      nodes: [n IN all_nodes | n {{
+        .*,
+        elementId: elementId(n),
+        labels: labels(n),
+        node_type: head(labels(n))
+      }}],
+      links: [rd IN all_rels | {{
+        gid: coalesce(toString(rd.rel.gid), elementId(rd.rel)),
+        elementId: elementId(rd.rel),
+        type: rd.type,
+        from_gid: rd.from.gid,
+        to_gid: rd.to.gid,
+        from_labels: labels(rd.from),
+        to_labels: labels(rd.to),
+        // Common fields consumed by the frontend
+        relationship_summary: coalesce(rd.rel.summary, rd.rel.`Relationship Summary`, rd.rel.name, rd.rel.text),
+        article_title: coalesce(rd.rel.title, rd.rel.`Article Title`),
+        article_url: coalesce(rd.rel.url, rd.rel.`Article URL`, rd.rel.`article URL`),
+        relationship_date: coalesce(rd.rel.date, rd.rel.`Date`, rd.rel.`Relationship Date`),
+        properties: rd.rel {{ .* }}
+      }}]
     }} AS graphData
     """
     
@@ -489,10 +208,26 @@ def get_cluster_data_query(
     """
 
     query = """
+    // Resolve section filter to a gr_id (new DB) if provided.
+    WITH $section_query AS section_query
+    OPTIONAL MATCH (sec:section)
+    WHERE section_query IS NOT NULL
+      AND (
+        toString(sec.gid) = toString(section_query)
+        OR sec.`Section Name` = section_query
+        OR sec.`graph name` = section_query
+      )
+    WITH section_query, toString(sec.gr_id) AS section_gr_id
+
     MATCH (n)
     WHERE ANY(l IN labels(n) WHERE replace(toLower(l), ' ', '_') = $node_type OR toLower(l) = $node_type)
-      AND ($section_query IS NULL OR n.section = $section_query)
       AND n[$property_key] IS NOT NULL
+      AND (
+        section_query IS NULL
+        OR toString(n.gr_id) = coalesce(section_gr_id, toString(section_query))
+        OR n.section = section_query
+        OR section_query IN coalesce(n.sections, [])
+      )
     WITH n, toString(n[$property_key]) AS propVal
     WITH propVal,
          collect(DISTINCT {
@@ -556,167 +291,73 @@ def get_section_by_id_query(section_gid: str):
 def get_graph_data_by_section_and_country_query(section_query: str, country_name: str) -> Tuple[str, dict]:
     """
     Query to fetch graph data (nodes and links) for a section filtered by country.
-    
-    NODES contain:
-    - All nodes whose "section" field matches the section_query AND are connected to the specified country
-    - Country nodes matching the country_name
-    
-    LINKS contain:
-    - The relationships between the NODES included in the database
+
+    Updated for the new Neo4j schema:
+    - `section_query` is treated as the section `gid` (string), consistent with the homepage mapping.
+    - We resolve `section.gr_id`, then find a Country node within that gr_id by name, then include nodes within 2 hops.
     """
     
-    query = f"""
-    MATCH (section:Section {{section_query: $section_query}})
-    WITH section
+    query = """
+    MATCH (section:section)
+    WHERE toString(section.gid) = toString($section_query)
+       OR section.`Section Name` = $section_query
+       OR section.`graph name` = $section_query
+    WITH section, toString(section.gr_id) AS gr_id
 
     // Find the country node(s) matching the country name in this section
-    MATCH (country:Country)
-    WHERE country.`Country Name` = $country_name
-      AND country.section = section.section_query
+    MATCH (country)
+    WHERE toString(country.gr_id) = gr_id
+      AND ANY(l IN labels(country) WHERE toLower(l) = 'country')
+      AND toLower(coalesce(country.name, country.`Country Name`, country.`Country Name_new`, '')) = toLower($country_name)
 
-    // Get all nodes directly connected to this country (1 hop)
-    MATCH (country)-[r1]-(n)
-    WHERE (n:Entity OR n:Relationship OR n:Amount OR n:Agency OR n:Action OR n:Country OR n:DBA OR n:Description OR n:Location OR n:`Place Of Performance` OR n:Process OR n:Recipient OR n:Region OR n:Result OR n:Purpose OR n:Transaction OR n:`Sub Agency` OR n:`USAID Program Region`)
-      AND n.section = section.section_query
+    // Collect nodes within 2 hops of the country (inside the same gr_id)
+    MATCH (country)-[*0..2]-(n)
+    WHERE toString(n.gr_id) = gr_id
+      AND NONE(l IN labels(n) WHERE toLower(l) IN ['story','chapter','section'])
+    WITH gr_id, COLLECT(DISTINCT n.gid) AS node_gids
+    WITH gr_id, [gid IN node_gids WHERE gid IS NOT NULL] AS node_gids
 
-    // Collect direct connections first
-    WITH section, country, COLLECT(DISTINCT n.gid) as direct_connections
+    MATCH (node)
+    WHERE node.gid IN node_gids
+      AND toString(node.gr_id) = gr_id
+      AND NONE(l IN labels(node) WHERE toLower(l) IN ['story','chapter','section'])
+    WITH gr_id, COLLECT(DISTINCT node) AS all_nodes, node_gids
 
-    // Also get nodes connected through one intermediate node (2 hops)
-    OPTIONAL MATCH (country)-[r2]-(intermediate)-[r3]-(n2)
-    WHERE (intermediate:Entity OR intermediate:Relationship OR intermediate:Amount OR intermediate:Agency OR intermediate:Action OR intermediate:Country OR intermediate:DBA OR intermediate:Description OR intermediate:Location OR intermediate:`Place Of Performance` OR intermediate:Process OR intermediate:Recipient OR intermediate:Region OR intermediate:Result OR intermediate:Purpose OR intermediate:Transaction OR intermediate:`Sub Agency` OR intermediate:`USAID Program Region`)
-      AND (n2:Entity OR n2:Relationship OR n2:Amount OR n2:Agency OR n2:Action OR n2:Country OR n2:DBA OR n2:Description OR n2:Location OR n2:`Place Of Performance` OR n2:Process OR n2:Recipient OR n2:Region OR n2:Result OR n2:Purpose OR n2:Transaction OR n2:`Sub Agency` OR n2:`USAID Program Region`)
-      AND intermediate.section = section.section_query
-      AND n2.section = section.section_query
+    MATCH (a)-[rel]-(b)
+    WHERE a.gid IN node_gids
+      AND b.gid IN node_gids
+      AND toString(a.gr_id) = gr_id
+      AND toString(b.gr_id) = gr_id
+    WITH all_nodes,
+         COLLECT(DISTINCT {
+           rel: rel,
+           from: a,
+           to: b,
+           type: type(rel)
+         }) AS all_rels
 
-    // Collect all unique node gids (country, direct connections, and 2-hop connections)
-    WITH section, country, direct_connections,
-         COLLECT(DISTINCT n2.gid) as two_hop_connections
-    WITH section, country,
-         direct_connections + two_hop_connections + [country.gid] as all_node_gids_list
-
-    // Remove nulls and get unique gids
-    WITH section,
-         [gid IN all_node_gids_list WHERE gid IS NOT NULL] as all_node_gids
-
-    // Check if we have any nodes to process
-    WITH section, all_node_gids,
-         CASE WHEN size(all_node_gids) = 0 THEN [] ELSE all_node_gids END as node_gids_to_process
-
-    // Get all nodes by their gids
-    OPTIONAL MATCH (node)
-    WHERE (node:Entity OR node:Relationship OR node:Amount OR node:Agency OR node:Action OR node:Country OR node:DBA OR node:Description OR node:Location OR node:`Place Of Performance` OR node:Process OR node:Recipient OR node:Region OR node:Result OR node:Purpose OR node:Transaction OR node:`Sub Agency` OR node:`USAID Program Region`)
-      AND node.gid IN node_gids_to_process
-      AND node.section = section.section_query
-
-    // Get all relationships between these nodes
-    OPTIONAL MATCH (n)
-    WHERE (n:Entity OR n:Relationship OR n:Amount OR n:Agency OR n:Action OR n:Country OR n:DBA OR n:Description OR n:Location OR n:`Place Of Performance` OR n:Process OR n:Recipient OR n:Region OR n:Result OR n:Purpose OR n:Transaction OR n:`Sub Agency` OR n:`USAID Program Region`)
-      AND n.section = section.section_query
-      AND n.gid IN node_gids_to_process
-
-    OPTIONAL MATCH (n)-[r]->(m)
-    WHERE (m:Entity OR m:Relationship OR m:Amount OR m:Agency OR m:Action OR m:Country OR m:DBA OR m:Description OR m:Location OR m:`Place Of Performance` OR m:Process OR m:Recipient OR m:Region OR m:Result OR m:Purpose OR m:Transaction OR m:`Sub Agency` OR m:`USAID Program Region`)
-      AND m.section = section.section_query
-      AND m.gid IN node_gids_to_process
-
-    // Collect all nodes and relationships (filter out nulls from OPTIONAL MATCH)
-    WITH section,
-         [node IN COLLECT(DISTINCT node) WHERE node IS NOT NULL] as all_nodes,
-         [rel_data IN COLLECT(DISTINCT {{
-             rel: r,
-             from: n,
-             to: m,
-             type: type(r)
-         }}) WHERE rel_data.rel IS NOT NULL AND rel_data.from IS NOT NULL AND rel_data.to IS NOT NULL] as all_rels
-
-    // Format and return (reuse the same formatting logic from get_graph_data_by_section_query)
-    RETURN {{
-        nodes: [node IN all_nodes |
-            CASE
-                WHEN 'Entity' IN labels(node) THEN {{
-                    gid: node.gid,
-                    node_type: 'Entity',
-                    section: node.section,
-                    entity_name: node.`Entity Name`,
-                    entity_acronym: node.`Entity Acronym`,
-                    relationship_name: node.`Relationship NAME`,
-                    amount: node.Amount,
-                    receiver_name: node.`Receiver Name`,
-                    article_url: node.`article URL`,
-                    degree: node.degree,
-                    purpose: node.Purpose,
-                    url: node.URL,
-                    relationship_summary: node.`Relationship Summary`,
-                    entity_2_name: node.`Entity 2 Name`,
-                    date: node.Date,
-                    action_summary: node.`Action Summary`,
-                    article_url_full: node.`Article URL`,
-                    article_text: node.`Article Text`,
-                    article_title: node.`Article Title`,
-                    distributor_full_name: node.`Distributor Full Name`,
-                    summary: node.Summary,
-                    modifier_entity_name: node.`Modifier Entity Name`,
-                    relationship_date: node.`Relationship Date`,
-                    tag: node.Tag,
-                    action_text: node.`Action Text`
-                }}
-                WHEN 'Amount' IN labels(node) THEN {{
-                    gid: node.gid,
-                    node_type: 'Amount',
-                    section: node.section,
-                    degree: node.degree,
-                    Amount: node.Amount,
-                    `Distributor Full Name`: node.`Distributor Full Name`,
-                    `Receiver Name`: node.`Receiver Name`,
-                    Purpose: node.Purpose,
-                    `Disb Date`: node.`Disb Date`,
-                    `End Date`: node.`End Date`,
-                    `Project Number`: node.`Project Number`,
-                    ID: node.ID,
-                    Summary: node.Summary,
-                    URL: node.URL
-                }}
-                WHEN 'Country' IN labels(node) THEN {{
-                    gid: node.gid,
-                    node_type: 'Country',
-                    section: node.section,
-                    country_name: node.`Country Name`,
-                    degree: node.degree
-                }}
-                ELSE {{
-                    gid: node.gid,
-                    node_type: labels(node)[0],
-                    section: node.section
-                }}
-            END
-        ],
-        links: [rel_data IN all_rels WHERE rel_data.rel IS NOT NULL | {{
-            gid: id(rel_data.rel),
-            from_gid: rel_data.from.gid,
-            to_gid: rel_data.to.gid,
-            from_name: CASE
-                WHEN 'Entity' IN labels(rel_data.from) THEN rel_data.from.`Entity Name`
-                WHEN 'Relationship' IN labels(rel_data.from) THEN rel_data.from.`Relationship NAME`
-                WHEN 'Country' IN labels(rel_data.from) THEN rel_data.from.`Country Name`
-                ELSE toString(rel_data.from.gid)
-            END,
-            to_name: CASE
-                WHEN 'Entity' IN labels(rel_data.to) THEN rel_data.to.`Entity Name`
-                WHEN 'Relationship' IN labels(rel_data.to) THEN rel_data.to.`Relationship NAME`
-                WHEN 'Country' IN labels(rel_data.to) THEN rel_data.to.`Country Name`
-                ELSE toString(rel_data.to.gid)
-            END,
-            relationship_summary: rel_data.rel.`Relationship Summary`,
-            article_title: rel_data.rel.`Article Title`,
-            article_url: rel_data.rel.`article URL`,
-            relationship_date: rel_data.rel.`Relationship Date`,
-            relationship_quality: rel_data.rel.`Relationship Quality`,
-            type: rel_data.type
-        }}]
-    }} AS graphData
+    RETURN {
+      nodes: [n IN all_nodes | n {
+        .*,
+        elementId: elementId(n),
+        labels: labels(n),
+        node_type: head(labels(n))
+      }],
+      links: [rd IN all_rels | {
+        gid: coalesce(toString(rd.rel.gid), elementId(rd.rel)),
+        elementId: elementId(rd.rel),
+        type: rd.type,
+        from_gid: rd.from.gid,
+        to_gid: rd.to.gid,
+        relationship_summary: coalesce(rd.rel.summary, rd.rel.`Relationship Summary`, rd.rel.name, rd.rel.text),
+        article_title: coalesce(rd.rel.title, rd.rel.`Article Title`),
+        article_url: coalesce(rd.rel.url, rd.rel.`Article URL`, rd.rel.`article URL`),
+        relationship_date: coalesce(rd.rel.date, rd.rel.`Date`, rd.rel.`Relationship Date`),
+        properties: rd.rel { .* }
+      }]
+    } AS graphData
     """
-    
+
     params = {"section_query": section_query, "country_name": country_name}
     return query, params
 
@@ -911,14 +552,15 @@ def get_all_node_types_query():
     # Use a query that finds all distinct labels by checking actual nodes
     # This is more reliable than CALL db.labels() which may not work in all Neo4j versions
     query = """
-    // Get all distinct node labels by sampling nodes
+    // New DB: return normalized label names for nodes that participate in graphs (by gr_id).
     MATCH (n)
-    WHERE n:Entity OR n:Relationship OR n:Amount OR n:Agency OR n:Action OR n:Country OR n:DBA OR n:Description OR n:Location OR n:`Place Of Performance` OR n:Process OR n:Recipient OR n:Region OR n:Result OR n:Purpose OR n:Transaction OR n:`Sub Agency` OR n:`USAID Program Region`
+    WHERE n.gr_id IS NOT NULL
+      AND NONE(l IN labels(n) WHERE toLower(l) IN ['story','chapter','section'])
     WITH labels(n) AS nodeLabels
     UNWIND nodeLabels AS label
     WITH label
-    WHERE label IN ['Entity', 'Relationship', 'Amount', 'Agency', 'Action', 'Country', 'DBA', 'Description', 'Location', 'Place Of Performance', 'Process', 'Recipient', 'Region', 'Result', 'Purpose', 'Transaction', 'Sub Agency', 'USAID Program Region']
-    RETURN DISTINCT label AS node_type
+    WHERE toLower(label) NOT IN ['story','chapter','section']
+    RETURN DISTINCT replace(toLower(label), ' ', '_') AS node_type
     ORDER BY node_type
     """
     return query, {}

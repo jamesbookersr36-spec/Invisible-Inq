@@ -2133,8 +2133,8 @@ const HomePage = () => {
           {}
           <div className="h-full flex items-center ml-8 pl-2">
             <img
-              src="/logo/logo-with-text.png"
-              alt="Invisible Injury Logo"
+              src="/images/logo-with-text.png"
+              alt="Invisible Inqury Logo"
               className="h-8 object-contain"
             />
           </div>
@@ -2303,7 +2303,7 @@ const HomePage = () => {
           {/* Logo section */}
           <div className="flex justify-center items-center px-6 sm:px-8 lg:px-12 xl:px-16 pt-8 pb-6 w-full">
             <img
-              src="/logo/logo-without-text.png"
+              src="/images/logo-without-text.png"
               alt="Invisible Inquiry Logo"
               className="h-12 sm:h-12 object-contain"
             />
