@@ -747,8 +747,19 @@ const RelationshipTooltipLayout = ({ node, color }) => {
 
 // Action-specific layout - Shows Source → ProcessName → Target flow
 const ActionTooltipLayout = ({ node, color, graphData }) => {
-  // Process/Action name (the node's name displayed in the middle)
-  const processName = node.category || 'Action';
+  // Process/Action name (the node's actual action value/name)
+  const processName = node.name || 
+                      node.action_text || 
+                      node.action_name || 
+                      node.label || 
+                      node.title ||
+                      node.action ||
+                      node.properties?.name ||
+                      node.properties?.action_text ||
+                      node.properties?.action_name ||
+                      node.properties?.label ||
+                      node.category || 
+                      'Action';
   
   // Find connected source and target from graph links
   let sourceEntity = 'Entity Source';
