@@ -1806,6 +1806,8 @@ const HomePage = () => {
     const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
     
     try {
+      const sectionGid = currentSubstory?.id || currentSubstoryId || null;
+
       // Send request to backend to create node in Neo4j
       const response = await fetch(`${apiBaseUrl}/api/nodes/create`, {
         method: 'POST',
@@ -1814,7 +1816,9 @@ const HomePage = () => {
         },
         body: JSON.stringify({
           category: nodeData.category,
-          properties: nodeData.properties
+          properties: nodeData.properties,
+          // Attach to currently-selected section so it appears in the graph immediately (new DB uses gr_id per section).
+          section_gid: sectionGid
         }),
       });
 

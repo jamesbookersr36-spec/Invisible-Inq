@@ -1105,6 +1105,8 @@ class CypherQuery(BaseModel):
 class CreateNodeRequest(BaseModel):
     category: str  # Node label/type
     properties: dict  # Node properties
+    # Optional: attach this new node to the currently selected section (new DB uses :section gid -> gr_id).
+    section_gid: Optional[str] = None
 
 @app.post("/api/cypher/execute", response_model=dict)
 async def execute_cypher_query(cypher_query: CypherQuery):
@@ -1254,6 +1256,28 @@ async def create_node(node_request: CreateNodeRequest):
         
         category = node_request.category.strip()
         properties = node_request.properties or {}
+
+        # If a section_gid was provided, resolve section.gr_id and attach it to the new node
+        section_gid = (node_request.section_gid or "").strip() if node_request.section_gid else None
+        if section_gid:
+            try:
+                section_lookup = db.execute_query(
+                    "MATCH (s:section) WHERE toString(s.gid) = toString($gid) RETURN s.gr_id AS gr_id LIMIT 1",
+                    {"gid": section_gid},
+                )
+                if section_lookup and section_lookup[0].get("gr_id") is not None:
+                    gr_id = section_lookup[0].get("gr_id")
+                    properties.setdefault("gr_id", gr_id)
+                    # Compatibility helpers for other features/filters
+                    properties.setdefault("section", section_gid)
+                    properties.setdefault("sections", [section_gid])
+            except Exception as e:
+                logger.warning(f"[BACKEND] Could not resolve section gr_id for section_gid={section_gid}: {e}")
+
+        # Ensure every created node has a stable gid (new DB relies on gid heavily)
+        if "gid" not in properties or properties.get("gid") in [None, ""]:
+            import uuid
+            properties["gid"] = uuid.uuid4().hex
         
         # Clean category label - remove backticks if present, we'll add them properly
         clean_category = category
@@ -1403,6 +1427,7 @@ async def delete_node(node_request: DeleteNodeRequest):
            OR (toInteger($node_id) IS NOT NULL AND n.gid = toInteger($node_id))
            OR toString(id(n)) = $node_id
            OR (toFloat($node_id) IS NOT NULL AND id(n) = toInteger(toFloat($node_id)))
+           OR elementId(n) = $node_id
         RETURN n, id(n) as internal_id, n.gid as gid_value, toString(n.gid) as gid_string, labels(n) as node_labels
         LIMIT 1
         """
@@ -1438,6 +1463,7 @@ async def delete_node(node_request: DeleteNodeRequest):
            OR (toInteger($node_id) IS NOT NULL AND n.gid = toInteger($node_id))
            OR toString(id(n)) = $node_id
            OR (toFloat($node_id) IS NOT NULL AND id(n) = toInteger(toFloat($node_id)))
+           OR elementId(n) = $node_id
         DETACH DELETE n
         RETURN count(n) as deleted_count
         """
