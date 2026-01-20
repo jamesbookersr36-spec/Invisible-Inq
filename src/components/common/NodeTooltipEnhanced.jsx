@@ -610,7 +610,8 @@ const AmountTooltipLayout = ({ node, color, graphData }) => {
                    'Entity Target';
   }
   
-  const entityType = node.section || node.entity_type || node.subtype || node.node_type || node.type || node.properties?.type || 'Type';
+  // NOTE: `node.section` is section membership (Section Name key), not the node's type.
+  const entityType = node.entity_type || node.subtype || node.node_type || node.type || node.properties?.type || 'Type';
   const relatedCount = node.degree || node.related_count || node.count || node.properties?.related_count || null;
 
   // Format amount with currency
@@ -820,7 +821,8 @@ const ActionTooltipLayout = ({ node, color, graphData }) => {
                    'Entity Target';
   }
 
-  const entityType = node.section || node.action_type || node.subtype || node.type || node.properties?.type || 'Type';
+  // NOTE: `node.section` is section membership (Section Name key), not the node's type.
+  const entityType = node.action_type || node.subtype || node.node_type || node.type || node.properties?.type || 'Type';
   const relatedCount = node.degree || node.related_count || node.count || node.properties?.related_count || 857;
 
   // Description text

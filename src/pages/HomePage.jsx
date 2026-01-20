@@ -1817,7 +1817,8 @@ const HomePage = () => {
         body: JSON.stringify({
           category: nodeData.category,
           properties: nodeData.properties,
-          // Attach to currently-selected section so it appears in the graph immediately (new DB uses gr_id per section).
+          // Attach to currently-selected section so it appears in the graph immediately
+          // (new DB matches via Section Name key stored in node.section/node.sections).
           section_gid: sectionGid
         }),
       });

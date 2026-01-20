@@ -102,8 +102,10 @@ def get_graph_data_by_section_query(section_gid: Optional[str] = None, section_q
     Query to fetch graph data (nodes and links) for a section.
 
     Updated for the new Neo4j schema:
-    - Section identity: `(:section {gid})` → `section.gr_id`
-    - Graph membership: nodes/relationships where `toString(gr_id)` matches the section's `gr_id`
+    - Section identity: resolve `(:section)` by gid/name
+    - Graph membership: nodes/relationships are associated to a section by matching
+      the section's display name (Section Name / graph name) with the other node's
+      section key (typically `node.section` or membership list `node.sections`).
     - Node labels/types are not hardcoded; we include all nodes except `story/chapter/section`
     """
     
@@ -134,29 +136,37 @@ def get_graph_data_by_section_query(section_gid: Optional[str] = None, section_q
     
     query = f"""
     {match_clause}
-    // Resolve the graph membership key for this Section.
-    // Primary: section.gr_id. Fallback: section.gid (some datasets reuse gid as the graph id).
-    WITH section, coalesce(toString(section.gr_id), toString(section.gid)) AS graph_gr_id
+    // Resolve the section key used by graph nodes. Per latest DB, other nodes store a "section key"
+    // that matches the Section node's Section Name (or graph name).
+    WITH section,
+         trim(coalesce(section.`Section Name`, section.`graph name`, toString(section.gid))) AS section_key
 
-    // Collect all nodes in this section's graph.
-    // Primary membership: node.gr_id == graph_gr_id.
-    // Fallbacks: node.section / node.sections may be used by some loaders.
+    // Collect all nodes in this section by matching section_key against node.section / node.sections
     MATCH (node)
+    WITH section_key, node,
+         trim(toString(coalesce(node.section, node.`Section`, node.`Section KEY`, node.`Section Key`, node.`Section Name`, node.`graph name`, ""))) AS node_section_key,
+         [s IN coalesce(node.sections, []) | trim(toString(s))] AS node_sections
     WHERE (
-      toString(node.gr_id) = graph_gr_id
-      OR toString(node.section) = graph_gr_id
-      OR toString(node.section) = toString(section.gid)
-      OR toString(section.gid) IN coalesce(node.sections, [])
+      toLower(node_section_key) = toLower(section_key)
+      OR ANY(s IN node_sections WHERE toLower(s) = toLower(section_key))
     )
       AND NONE(l IN labels(node) WHERE toLower(l) IN ['story','chapter','section'])
-    WITH section, graph_gr_id, COLLECT(DISTINCT node) AS all_nodes
+    WITH section_key, COLLECT(DISTINCT node) AS all_nodes
 
-    // Collect relationships fully inside this section's graph.
-    // Prefer endpoint membership (more reliable); allow rel.gr_id match as an additional inclusion signal.
+    // Collect relationships fully inside this section (by endpoints' section key)
     MATCH (a)-[rel]-(b)
+    WITH section_key, a, b, rel,
+         trim(toString(coalesce(a.section, a.`Section`, a.`Section KEY`, a.`Section Key`, a.`Section Name`, ""))) AS a_section_key,
+         trim(toString(coalesce(b.section, b.`Section`, b.`Section KEY`, b.`Section Key`, b.`Section Name`, ""))) AS b_section_key,
+         trim(toString(coalesce(rel.section, rel.`Section`, rel.`Section KEY`, rel.`Section Key`, ""))) AS rel_section_key,
+         [s IN coalesce(a.sections, []) | trim(toString(s))] AS a_sections,
+         [s IN coalesce(b.sections, []) | trim(toString(s))] AS b_sections
     WHERE (
-      (toString(a.gr_id) = graph_gr_id AND toString(b.gr_id) = graph_gr_id)
-      OR toString(rel.gr_id) = graph_gr_id
+      toLower(a_section_key) = toLower(section_key)
+      OR ANY(s IN a_sections WHERE toLower(s) = toLower(section_key))
+      OR toLower(b_section_key) = toLower(section_key)
+      OR ANY(s IN b_sections WHERE toLower(s) = toLower(section_key))
+      OR toLower(rel_section_key) = toLower(section_key)
     )
       AND NONE(l IN labels(a) WHERE toLower(l) IN ['story','chapter','section'])
       AND NONE(l IN labels(b) WHERE toLower(l) IN ['story','chapter','section'])
@@ -220,7 +230,7 @@ def get_cluster_data_query(
     """
 
     query = """
-    // Resolve section filter to a gr_id (new DB) if provided.
+    // Resolve section filter to a section key (new DB) if provided.
     WITH $section_query AS section_query
     OPTIONAL MATCH (sec:section)
     WHERE section_query IS NOT NULL
@@ -229,16 +239,23 @@ def get_cluster_data_query(
         OR sec.`Section Name` = section_query
         OR sec.`graph name` = section_query
       )
-    WITH section_query, toString(sec.gr_id) AS section_gr_id
+    WITH section_query,
+         trim(coalesce(sec.`Section Name`, sec.`graph name`, toString(sec.gid))) AS section_key
 
     MATCH (n)
+    WITH section_query, section_key, n,
+         trim(toString(coalesce(n.section, n.`Section`, n.`Section KEY`, n.`Section Key`, n.`Section Name`, ""))) AS n_section_key,
+         [s IN coalesce(n.sections, []) | trim(toString(s))] AS n_sections
     WHERE ANY(l IN labels(n) WHERE replace(toLower(l), ' ', '_') = $node_type OR toLower(l) = $node_type)
       AND n[$property_key] IS NOT NULL
       AND (
         section_query IS NULL
-        OR toString(n.gr_id) = coalesce(section_gr_id, toString(section_query))
-        OR n.section = section_query
-        OR section_query IN coalesce(n.sections, [])
+        OR (
+          toLower(n_section_key) = toLower(section_key)
+          OR ANY(s IN n_sections WHERE toLower(s) = toLower(section_key))
+          OR toLower(n_section_key) = toLower(toString(section_query))
+          OR ANY(s IN n_sections WHERE toLower(s) = toLower(toString(section_query)))
+        )
       )
     WITH n, toString(n[$property_key]) AS propVal
     WITH propVal,
@@ -307,7 +324,9 @@ def get_graph_data_by_section_and_country_query(section_query: str, country_name
 
     Updated for the new Neo4j schema:
     - `section_query` is treated as the section `gid` (string), consistent with the homepage mapping.
-    - We resolve `section.gr_id`, then find a Country node within that gr_id by name, then include nodes within 2 hops.
+    - We resolve the section key (Section Name / graph name), then find a Country node that is in this
+      section (via `country.section` / `country.sections`), then include nodes within 2 hops that are
+      also in this section.
     """
     
     query = """
@@ -315,32 +334,41 @@ def get_graph_data_by_section_and_country_query(section_query: str, country_name
     WHERE toString(section.gid) = toString($section_query)
        OR section.`Section Name` = $section_query
        OR section.`graph name` = $section_query
-    WITH section, toString(section.gr_id) AS gr_id
+    WITH section, trim(coalesce(section.`Section Name`, section.`graph name`, toString(section.gid))) AS section_key
 
     // Find the country node(s) matching the country name in this section
     MATCH (country)
-    WHERE toString(country.gr_id) = gr_id
-      AND ANY(l IN labels(country) WHERE toLower(l) = 'country')
+    WITH section_key, country,
+         trim(toString(coalesce(country.section, country.`Section`, country.`Section KEY`, country.`Section Key`, country.`Section Name`, ""))) AS country_section_key,
+         [s IN coalesce(country.sections, []) | trim(toString(s))] AS country_sections
+    WHERE ANY(l IN labels(country) WHERE toLower(l) = 'country')
+      AND (
+        toLower(country_section_key) = toLower(section_key)
+        OR ANY(s IN country_sections WHERE toLower(s) = toLower(section_key))
+      )
       AND toLower(coalesce(country.name, country.`Country Name`, country.`Country Name_new`, '')) = toLower($country_name)
 
-    // Collect nodes within 2 hops of the country (inside the same gr_id)
+    // Collect nodes within 2 hops of the country (inside the same section)
     MATCH (country)-[*0..2]-(n)
-    WHERE toString(n.gr_id) = gr_id
+    WITH section_key, n,
+         trim(toString(coalesce(n.section, n.`Section`, n.`Section KEY`, n.`Section Key`, n.`Section Name`, ""))) AS n_section_key,
+         [s IN coalesce(n.sections, []) | trim(toString(s))] AS n_sections
+    WHERE (
+      toLower(n_section_key) = toLower(section_key)
+      OR ANY(s IN n_sections WHERE toLower(s) = toLower(section_key))
+    )
       AND NONE(l IN labels(n) WHERE toLower(l) IN ['story','chapter','section'])
-    WITH gr_id, COLLECT(DISTINCT n.gid) AS node_gids
-    WITH gr_id, [gid IN node_gids WHERE gid IS NOT NULL] AS node_gids
+    WITH section_key, COLLECT(DISTINCT n.gid) AS node_gids
+    WITH section_key, [gid IN node_gids WHERE gid IS NOT NULL] AS node_gids
 
     MATCH (node)
     WHERE node.gid IN node_gids
-      AND toString(node.gr_id) = gr_id
       AND NONE(l IN labels(node) WHERE toLower(l) IN ['story','chapter','section'])
-    WITH gr_id, COLLECT(DISTINCT node) AS all_nodes, node_gids
+    WITH section_key, COLLECT(DISTINCT node) AS all_nodes, node_gids
 
     MATCH (a)-[rel]-(b)
     WHERE a.gid IN node_gids
       AND b.gid IN node_gids
-      AND toString(a.gr_id) = gr_id
-      AND toString(b.gr_id) = gr_id
     WITH all_nodes,
          COLLECT(DISTINCT {
            rel: rel,
@@ -410,17 +438,24 @@ def get_calendar_data_by_section_query(section_gid: Optional[str] = None, sectio
     
     query = f"""
     {match_clause}
-    WITH section, toString(section.gr_id) AS gr_id
+    WITH section,
+         trim(coalesce(section.`Section Name`, section.`graph name`, toString(section.gid))) AS section_key
 
     // Timeline items: nodes with a usable date and/or event-like labels
     MATCH (n)
-    WHERE toString(n.gr_id) = gr_id
+    WITH section, section_key, n,
+         trim(toString(coalesce(n.section, n.`Section`, n.`Section KEY`, n.`Section Key`, n.`Section Name`, ""))) AS n_section_key,
+         [s IN coalesce(n.sections, []) | trim(toString(s))] AS n_sections
+    WHERE (
+      toLower(n_section_key) = toLower(section_key)
+      OR ANY(s IN n_sections WHERE toLower(s) = toLower(section_key))
+    )
       AND NONE(l IN labels(n) WHERE toLower(l) IN ['story','chapter','section'])
       AND (
         ANY(l IN labels(n) WHERE toLower(l) IN ['action','process','result','event_attend','funding','relationship'])
         OR coalesce(n.date, n.`Date`, n.`Relationship Date`, n.`Action Date`, n.`Process Date`, n.`Disb Date`) IS NOT NULL
       )
-    WITH section, gr_id,
+    WITH section, section_key,
          COLLECT(DISTINCT {{
            gid: coalesce(toString(n.gid), elementId(n)),
            node_type: head(labels(n)),
@@ -432,9 +467,15 @@ def get_calendar_data_by_section_query(section_gid: Optional[str] = None, sectio
 
     // Floating items: everything else in the section (non-hierarchy nodes)
     MATCH (f)
-    WHERE toString(f.gr_id) = gr_id
+    WITH section, section_key, timeline_items, f,
+         trim(toString(coalesce(f.section, f.`Section`, f.`Section KEY`, f.`Section Key`, f.`Section Name`, ""))) AS f_section_key,
+         [s IN coalesce(f.sections, []) | trim(toString(s))] AS f_sections
+    WHERE (
+      toLower(f_section_key) = toLower(section_key)
+      OR ANY(s IN f_sections WHERE toLower(s) = toLower(section_key))
+    )
       AND NONE(l IN labels(f) WHERE toLower(l) IN ['story','chapter','section'])
-    WITH section, timeline_items, gr_id,
+    WITH section, section_key, timeline_items,
          COLLECT(DISTINCT {{
            gid: coalesce(toString(f.gid), elementId(f)),
            node_type: head(labels(f)),
@@ -443,10 +484,21 @@ def get_calendar_data_by_section_query(section_gid: Optional[str] = None, sectio
            properties: f {{ .* }}
          }}) AS floating_items
 
-    // Relationships: between all nodes inside this section (by gr_id)
+    // Relationships: between all nodes inside this section (by section key)
     MATCH (source)-[rel]-(target)
-    WHERE toString(source.gr_id) = gr_id
-      AND toString(target.gr_id) = gr_id
+    WITH section, section_key, timeline_items, floating_items, source, target, rel,
+         trim(toString(coalesce(source.section, source.`Section`, source.`Section KEY`, source.`Section Key`, source.`Section Name`, ""))) AS s_key,
+         trim(toString(coalesce(target.section, target.`Section`, target.`Section KEY`, target.`Section Key`, target.`Section Name`, ""))) AS t_key,
+         [s IN coalesce(source.sections, []) | trim(toString(s))] AS s_sections,
+         [s IN coalesce(target.sections, []) | trim(toString(s))] AS t_sections,
+         trim(toString(coalesce(rel.section, rel.`Section`, rel.`Section KEY`, rel.`Section Key`, ""))) AS r_key
+    WHERE (
+      toLower(s_key) = toLower(section_key)
+      OR ANY(x IN s_sections WHERE toLower(x) = toLower(section_key))
+      OR toLower(t_key) = toLower(section_key)
+      OR ANY(x IN t_sections WHERE toLower(x) = toLower(section_key))
+      OR toLower(r_key) = toLower(section_key)
+    )
       AND NONE(l IN labels(source) WHERE toLower(l) IN ['story','chapter','section'])
       AND NONE(l IN labels(target) WHERE toLower(l) IN ['story','chapter','section'])
     WITH section, timeline_items, floating_items,
@@ -487,11 +539,18 @@ def get_story_statistics_query(story_gid: Optional[str] = None, story_title: Opt
     {match_clause}
     OPTIONAL MATCH (story)-[:story_chapter]-(chapter:chapter)
     OPTIONAL MATCH (chapter)-[:chapter_section]-(section:section)
-    WITH story, COLLECT(DISTINCT toString(section.gr_id)) AS gr_ids
-    WITH story, [g IN gr_ids WHERE g IS NOT NULL AND g <> ""] AS gr_ids
+    WITH story,
+         COLLECT(DISTINCT trim(coalesce(section.`Section Name`, section.`graph name`, toString(section.gid)))) AS section_keys
+    WITH story, [k IN section_keys WHERE k IS NOT NULL AND k <> ""] AS section_keys
 
     MATCH (n)
-    WHERE toString(n.gr_id) IN gr_ids
+    WITH story, section_keys, n,
+         trim(toString(coalesce(n.section, n.`Section`, n.`Section KEY`, n.`Section Key`, n.`Section Name`, ""))) AS n_section_key,
+         [s IN coalesce(n.sections, []) | trim(toString(s))] AS n_sections
+    WHERE (
+      ANY(k IN section_keys WHERE toLower(n_section_key) = toLower(k))
+      OR ANY(k IN section_keys WHERE ANY(s IN n_sections WHERE toLower(s) = toLower(k)))
+    )
       AND NONE(l IN labels(n) WHERE toLower(l) IN ['story','chapter','section'])
     WITH story,
          COUNT(DISTINCT n) AS total_nodes,
@@ -515,9 +574,9 @@ def get_all_node_types_query():
     # Use a query that finds all distinct labels by checking actual nodes
     # This is more reliable than CALL db.labels() which may not work in all Neo4j versions
     query = """
-    // New DB: return normalized label names for nodes that participate in graphs (by gr_id).
+    // New DB: return normalized label names for nodes that participate in graphs (by section key).
     MATCH (n)
-    WHERE n.gr_id IS NOT NULL
+    WHERE (n.section IS NOT NULL OR size(coalesce(n.sections, [])) > 0)
       AND NONE(l IN labels(n) WHERE toLower(l) IN ['story','chapter','section'])
     WITH labels(n) AS nodeLabels
     UNWIND nodeLabels AS label
