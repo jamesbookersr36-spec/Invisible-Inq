@@ -314,33 +314,13 @@ const ConnectedData = ({
     const middleCounters = { funding: 0, action: 0 };
 
     // First pass: identify unique sources and middles
-    // Create exactly 7 source nodes: 1 (funding) + 2 (action middle) + 4 (action bottom)
-    // Structure based on image:
-    // TOP: 1 Entity (shared)
-    // MIDDLE: 2 Entity Name (separate nodes, both connect to same action)
-    // BOTTOM: 1 Entity + 3 Entity Name (4 separate nodes)
+    // Use source label + section as key to ensure same entities share the same position
     orderedRelationships.forEach((rel, relIndex) => {
       const section = rel.type === 'funding' ? 'funding' : 'action';
       
-      // Determine source key based on actual structure
-      let sourceKey;
-      if (section === 'funding') {
-        // All funding relationships share one Entity source node
-        sourceKey = 'Entity-funding';
-      } else {
-        // Action section
-        // relIndex 0-1: middle section (2 separate Entity Name nodes)
-        // relIndex 2-5: bottom section (1 Entity + 3 Entity Name, all separate)
-        if (relIndex < 2) {
-          // Middle section: 2 separate Entity Name nodes (index 0 and 1)
-          sourceKey = `Entity Name-action-middle-${relIndex}`;
-        } else {
-          // Bottom section: 4 separate source nodes
-          // relIndex 2: Entity
-          // relIndex 3-5: Entity Name (3 separate)
-          sourceKey = `${rel.source}-action-bottom-${relIndex}`;
-        }
-      }
+      // Create source key based on label and section only
+      // This ensures all relationships from the same source entity use the same visual node
+      const sourceKey = `${rel.source}-${section}`;
       
       // Only create new source node if this key hasn't appeared yet
       if (!sourceMeta.has(sourceKey)) {
@@ -362,34 +342,30 @@ const ConnectedData = ({
       }
     });
 
-    // Second pass: handle targets, creating separate nodes for splits
+    // Second pass: handle targets
+    // Use target label + section as key to ensure same entities share the same position
     orderedRelationships.forEach((rel, relIndex) => {
       const section = rel.type === 'funding' ? 'funding' : 'action';
-      // Create a unique key for this target based on source-middle-target combination
-      // This allows multiple targets with same label to be separate nodes
-      const targetKey = `${rel.source}-${rel.middle}-${rel.target}-${relIndex}`;
+      
+      // Create target key based on label and section only
+      // This ensures all relationships to the same target entity use the same visual node
+      const targetKey = `${rel.target}-${section}`;
       
       if (!targetNodesByRelationship.has(targetKey)) {
-        // Check if this is a split (same source-middle but different target instances)
-        const sameSourceMiddle = Array.from(targetNodesByRelationship.entries())
-          .filter(([key, data]) => {
-            const parts = key.split('-');
-            return parts[0] === rel.source && parts[1] === rel.middle;
-          });
-        
-        const targetIndex = sameSourceMiddle.length;
         targetNodesByRelationship.set(targetKey, {
           label: rel.target,
           section,
-          index: targetIndex,
+          index: targetCounters[section],
           relationshipIndex: relIndex
         });
         
-        // Also update targetMeta for positioning (use first occurrence's index)
-        if (!targetMeta.has(rel.target)) {
-          targetMeta.set(rel.target, { section, index: targetCounters[section] });
-          targetCounters[section] += 1;
-        }
+        // Also update targetMeta for positioning
+        targetMeta.set(targetKey, { 
+          section, 
+          index: targetCounters[section],
+          originalName: rel.target
+        });
+        targetCounters[section] += 1;
       }
     });
 
@@ -626,28 +602,17 @@ const ConnectedData = ({
 
     orderedRelationships.forEach((rel, relIndex) => {
       const section = rel.type === 'funding' ? 'funding' : 'action';
-      // Use same grouping logic to find the source node
-      let sourceKey;
-      if (section === 'funding') {
-        sourceKey = 'Entity-funding';
-      } else {
-        if (relIndex < 2) {
-          // Middle section: 2 separate Entity Name nodes
-          sourceKey = `Entity Name-action-middle-${relIndex}`;
-        } else {
-          // Bottom section: 4 separate source nodes
-          sourceKey = `${rel.source}-action-bottom-${relIndex}`;
-        }
-      }
+      
+      // Use simplified keys to find nodes
+      const sourceKey = `${rel.source}-${section}`;
+      const targetKey = `${rel.target}-${section}`;
+      
       const sourceNode = nodeMap.get(`source-${sourceKey}`);
       const middleNode = nodeMap.get(`middle-${rel.middle}`);
-      // Find the target node using the relationship key
-      const targetKey = `${rel.source}-${rel.middle}-${rel.target}-${relIndex}`;
       const targetNode = nodeMap.get(`target-${targetKey}`);
 
       if (sourceNode && middleNode && targetNode) {
         // Source -> Middle link (only create once per source-middle pair)
-        const sourceMiddleKey = `${sourceNode.id}-${middleNode.id}`;
         const existingLink = links.find(l => 
           l.source === sourceNode.id && l.target === middleNode.id
         );
@@ -661,13 +626,19 @@ const ConnectedData = ({
           });
         }
 
-        // Middle -> Target link (create for each target, even if same label)
-        links.push({
-          source: middleNode.id,
-          target: targetNode.id,
-          gradientType: rel.type === 'funding' ? 'green-blue' : 'orange-blue',
-          path: ''
-        });
+        // Middle -> Target link (only create once per middle-target pair to avoid duplicate lines)
+        const existingMiddleTargetLink = links.find(l =>
+          l.source === middleNode.id && l.target === targetNode.id
+        );
+        
+        if (!existingMiddleTargetLink) {
+          links.push({
+            source: middleNode.id,
+            target: targetNode.id,
+            gradientType: rel.type === 'funding' ? 'green-blue' : 'orange-blue',
+            path: ''
+          });
+        }
       }
     });
 
