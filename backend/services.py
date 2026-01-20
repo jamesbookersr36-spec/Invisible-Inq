@@ -600,9 +600,20 @@ def get_all_node_types() -> List[str]:
             logger.warning("Failed to fetch node types from database, using fallback list")
             return [
                 # New DB normalized labels (lowercase, underscores)
-                'entity', 'relationship', 'entity_gen', 'action', 'process', 'result',
-                'funding', 'event_attend', 'data', 'concept', 'framework',
-                'country', 'region'
+                # Primary entity types
+                'entity', 'entity_gen', 'relationship',
+                # Action/Process types
+                'action', 'process', 'result', 'event_attend',
+                # Financial types
+                'funding', 'amount', 'disb_or_trans',
+                # Organizational types
+                'agency', 'recipient', 'dba', 'organization', 'department',
+                'foundation', 'committee', 'council', 'institution', 'university',
+                # Location types
+                'country', 'location', 'place_of_performance', 'region', 'usaid_program_region',
+                # Other types
+                'description', 'publication', 'article', 'person', 'program',
+                'event', 'concept', 'framework', 'data'
             ]
         
         node_types = [result.get("node_type") for result in results if result.get("node_type")]
@@ -611,9 +622,21 @@ def get_all_node_types() -> List[str]:
         if not node_types:
             logger.warning("No node types found, using fallback list")
             return [
-                'entity', 'relationship', 'entity_gen', 'action', 'process', 'result',
-                'funding', 'event_attend', 'data', 'concept', 'framework',
-                'country', 'region'
+                # New DB normalized labels (lowercase, underscores)
+                # Primary entity types
+                'entity', 'entity_gen', 'relationship',
+                # Action/Process types
+                'action', 'process', 'result', 'event_attend',
+                # Financial types
+                'funding', 'amount', 'disb_or_trans',
+                # Organizational types
+                'agency', 'recipient', 'dba', 'organization', 'department',
+                'foundation', 'committee', 'council', 'institution', 'university',
+                # Location types
+                'country', 'location', 'place_of_performance', 'region', 'usaid_program_region',
+                # Other types
+                'description', 'publication', 'article', 'person', 'program',
+                'event', 'concept', 'framework', 'data'
             ]
         
         return node_types
@@ -621,9 +644,21 @@ def get_all_node_types() -> List[str]:
         logger.error(f"Error fetching node types: {str(e)}", exc_info=True)
         # Return fallback list on error
         return [
-            'entity', 'relationship', 'entity_gen', 'action', 'process', 'result',
-            'funding', 'event_attend', 'data', 'concept', 'framework',
-            'country', 'region'
+            # New DB normalized labels (lowercase, underscores)
+            # Primary entity types
+            'entity', 'entity_gen', 'relationship',
+            # Action/Process types
+            'action', 'process', 'result', 'event_attend',
+            # Financial types
+            'funding', 'amount', 'disb_or_trans',
+            # Organizational types
+            'agency', 'recipient', 'dba', 'organization', 'department',
+            'foundation', 'committee', 'council', 'institution', 'university',
+            # Location types
+            'country', 'location', 'place_of_performance', 'region', 'usaid_program_region',
+            # Other types
+            'description', 'publication', 'article', 'person', 'program',
+            'event', 'concept', 'framework', 'data'
         ]
 
 
